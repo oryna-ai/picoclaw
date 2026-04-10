@@ -350,7 +350,9 @@ func setupAndStartServices(
 		fms.Start()
 	}
 
-	overridePicoToken(cfg, authToken)
+	if cfg.Gateway.Port > 0 {
+		overridePicoToken(cfg, authToken)
+	}
 
 	runningServices.ChannelManager, err = channels.NewManager(cfg, msgBus, runningServices.MediaStore)
 	if err != nil {
@@ -378,10 +380,12 @@ func setupAndStartServices(
 		fmt.Println("⚠ Warning: No channels enabled")
 	}
 
-	addr := fmt.Sprintf("%s:%d", cfg.Gateway.Host, cfg.Gateway.Port)
-	runningServices.authToken = authToken
-	runningServices.HealthServer = health.NewServer(cfg.Gateway.Host, cfg.Gateway.Port, authToken)
-	runningServices.ChannelManager.SetupHTTPServer(addr, runningServices.HealthServer)
+	if cfg.Gateway.Port > 0 {
+		addr := fmt.Sprintf("%s:%d", cfg.Gateway.Host, cfg.Gateway.Port)
+		runningServices.authToken = authToken
+		runningServices.HealthServer = health.NewServer(cfg.Gateway.Host, cfg.Gateway.Port, authToken)
+		runningServices.ChannelManager.SetupHTTPServer(addr, runningServices.HealthServer)
+	}
 
 	if err = runningServices.ChannelManager.StartAll(context.Background()); err != nil {
 		return nil, fmt.Errorf("error starting channels: %w", err)
@@ -397,11 +401,13 @@ func setupAndStartServices(
 		voiceAgent.Start(vaCtx)
 	}
 
-	fmt.Printf(
-		"✓ Health endpoints available at http://%s:%d/health, /ready and /reload (POST)\n",
-		cfg.Gateway.Host,
-		cfg.Gateway.Port,
-	)
+	if cfg.Gateway.Port > 0 {
+		fmt.Printf(
+			"✓ Health endpoints available at http://%s:%d/health, /ready and /reload (POST)\n",
+			cfg.Gateway.Host,
+			cfg.Gateway.Port,
+		)
+	}
 
 	stateManager := state.NewManager(cfg.WorkspacePath())
 	runningServices.DeviceService = devices.NewService(devices.Config{
@@ -771,4 +777,51 @@ func createHeartbeatHandler(agentLoop *agent.AgentLoop) func(prompt, channel, ch
 		}
 		return tools.SilentResult(response)
 	}
+}
+
+// RunCfg starts the gateway runtime using the configuration loaded from configPath.
+func RunCfg(ctx context.Context, cfg *config.Config, debug bool, allowEmptyStartup bool) error {
+	provider, modelID, err := createStartupProvider(cfg, allowEmptyStartup)
+	if err != nil {
+		return fmt.Errorf("error creating provider: %w", err)
+	}
+	if modelID != "" {
+		cfg.Agents.Defaults.ModelName = modelID
+	}
+
+	msgBus := bus.NewMessageBus()
+	agentLoop := agent.NewAgentLoop(cfg, msgBus, provider)
+
+	fmt.Println("\n📦 Agent Status:")
+	startupInfo := agentLoop.GetStartupInfo()
+	toolsInfo := startupInfo["tools"].(map[string]any)
+	skillsInfo := startupInfo["skills"].(map[string]any)
+	fmt.Printf("  • Tools: %d loaded\n", toolsInfo["count"])
+	fmt.Printf("  • Skills: %d/%d available\n", skillsInfo["available"], skillsInfo["total"])
+
+	runningServices, err := setupAndStartServices(cfg, agentLoop, msgBus, "")
+	if err != nil {
+		return err
+	}
+
+	// Setup manual reload channel for /reload endpoint
+	manualReloadChan := make(chan struct{}, 1)
+	runningServices.manualReloadChan = manualReloadChan
+	reloadTrigger := func() error {
+		if !runningServices.reloading.CompareAndSwap(false, true) {
+			return fmt.Errorf("reload already in progress")
+		}
+		select {
+		case manualReloadChan <- struct{}{}:
+			return nil
+		default:
+			// Should not happen, but reset flag if channel is full
+			runningServices.reloading.Store(false)
+			return fmt.Errorf("reload already queued")
+		}
+	}
+
+	agentLoop.SetReloadFunc(reloadTrigger)
+
+	return agentLoop.Run(ctx)
 }

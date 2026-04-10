@@ -627,7 +627,7 @@ func (al *AgentLoop) drainBusToSteering(ctx context.Context, activeScope, active
 
 		msgScope, _, scopeOK := al.resolveSteeringTarget(msg)
 		if !scopeOK || msgScope != activeScope {
-			if err := al.requeueInboundMessage(msg); err != nil {
+			if err := al.requeueInboundMessage(msg, activeAgentID); err != nil {
 				logger.WarnCF("agent", "Failed to requeue non-steering inbound message", map[string]any{
 					"error":     err.Error(),
 					"channel":   msg.Channel,
@@ -681,6 +681,17 @@ func (al *AgentLoop) PublishResponseIfNeeded(ctx context.Context, channel, chatI
 		}
 	}
 
+	// 从上下文中获取当前 agentID
+	agentID := ""
+	ts := turnStateFromContext(ctx)
+	if ts != nil {
+		agentID = ts.agentID
+	} else {
+		if defaultAgent != nil {
+			agentID = defaultAgent.ID
+		}
+	}
+
 	if alreadySent {
 		logger.DebugCF(
 			"agent",
@@ -691,9 +702,10 @@ func (al *AgentLoop) PublishResponseIfNeeded(ctx context.Context, channel, chatI
 	}
 
 	al.bus.PublishOutbound(ctx, bus.OutboundMessage{
-		Channel: channel,
-		ChatID:  chatID,
-		Content: response,
+		Channel:  channel,
+		ChatID:   chatID,
+		Content:  response,
+		Metadata: map[string]string{"agent_id": agentID},
 	})
 	logger.InfoCF("agent", "Published outbound response",
 		map[string]any{
@@ -1472,16 +1484,17 @@ func (al *AgentLoop) resolveSteeringTarget(msg bus.InboundMessage) (string, stri
 	return resolveScopeKey(route, msg.SessionKey), agent.ID, true
 }
 
-func (al *AgentLoop) requeueInboundMessage(msg bus.InboundMessage) error {
+func (al *AgentLoop) requeueInboundMessage(msg bus.InboundMessage, activeAgentID string) error {
 	if al.bus == nil {
 		return nil
 	}
 	pubCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	return al.bus.PublishOutbound(pubCtx, bus.OutboundMessage{
-		Channel: msg.Channel,
-		ChatID:  msg.ChatID,
-		Content: msg.Content,
+		Channel:  msg.Channel,
+		ChatID:   msg.ChatID,
+		Content:  msg.Content,
+		Metadata: map[string]string{"agent_id": activeAgentID},
 	})
 }
 
@@ -1590,9 +1603,10 @@ func (al *AgentLoop) runAgentLoop(
 
 	if opts.SendResponse && result.finalContent != "" {
 		al.bus.PublishOutbound(ctx, bus.OutboundMessage{
-			Channel: opts.Channel,
-			ChatID:  opts.ChatID,
-			Content: result.finalContent,
+			Channel:  opts.Channel,
+			ChatID:   opts.ChatID,
+			Content:  result.finalContent,
+			Metadata: map[string]string{"agent_id": ts.agentID},
 		})
 	}
 
@@ -2121,9 +2135,10 @@ turnLoop:
 
 				if retry == 0 && !constants.IsInternalChannel(ts.channel) {
 					al.bus.PublishOutbound(ctx, bus.OutboundMessage{
-						Channel: ts.channel,
-						ChatID:  ts.chatID,
-						Content: "Context window exceeded. Compressing history and retrying...",
+						Channel:  ts.channel,
+						ChatID:   ts.chatID,
+						Content:  "Context window exceeded. Compressing history and retrying...",
+						Metadata: map[string]string{"agent_id": ts.agentID},
 					})
 				}
 
@@ -2441,9 +2456,10 @@ turnLoop:
 				feedbackMsg := fmt.Sprintf("\U0001f527 `%s`\n```\n%s\n```", tc.Name, feedbackPreview)
 				fbCtx, fbCancel := context.WithTimeout(turnCtx, 3*time.Second)
 				_ = al.bus.PublishOutbound(fbCtx, bus.OutboundMessage{
-					Channel: ts.channel,
-					ChatID:  ts.chatID,
-					Content: feedbackMsg,
+					Channel:  ts.channel,
+					ChatID:   ts.chatID,
+					Content:  feedbackMsg,
+					Metadata: map[string]string{"agent_id": ts.agentID},
 				})
 				fbCancel()
 			}
@@ -2458,9 +2474,10 @@ turnLoop:
 					outCtx, outCancel := context.WithTimeout(context.Background(), 5*time.Second)
 					defer outCancel()
 					_ = al.bus.PublishOutbound(outCtx, bus.OutboundMessage{
-						Channel: ts.channel,
-						ChatID:  ts.chatID,
-						Content: result.ForUser,
+						Channel:  ts.channel,
+						ChatID:   ts.chatID,
+						Content:  result.ForUser,
+						Metadata: map[string]string{"agent_id": ts.agentID},
 					})
 				}
 
@@ -2569,6 +2586,7 @@ turnLoop:
 					Content: toolResult.ForUser,
 					Metadata: map[string]string{
 						"is_tool_call": "true",
+						"agent_id":     ts.agentID,
 					},
 				})
 				logger.DebugCF("agent", "Sent tool result to user",

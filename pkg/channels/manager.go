@@ -430,6 +430,9 @@ func (m *Manager) initChannels(channels *config.ChannelsConfig) error {
 		m.initChannel("vk", "VK")
 	}
 
+	// Always initialize claw channel for frontend communication
+	m.initChannel("claw", "Claw")
+
 	logger.InfoCF("channels", "Channel initialization completed", map[string]any{
 		"enabled_channels": len(m.channels),
 	})
