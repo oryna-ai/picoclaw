@@ -181,7 +181,7 @@ func Run(debug bool, homePath, configPath string, allowEmptyStartup bool) error 
 			"skills_available": skillsInfo["available"],
 		})
 
-	runningServices, err := setupAndStartServices(cfg, agentLoop, msgBus, pidData.Token)
+	runningServices, err := setupAndStartServices(context.TODO(), cfg, agentLoop, msgBus, pidData.Token)
 	if err != nil {
 		return err
 	}
@@ -304,6 +304,7 @@ func createStartupProvider(
 }
 
 func setupAndStartServices(
+	ctx context.Context,
 	cfg *config.Config,
 	agentLoop *agent.AgentLoop,
 	msgBus *bus.MessageBus,
@@ -335,7 +336,7 @@ func setupAndStartServices(
 		cfg.Heartbeat.Enabled,
 	)
 	runningServices.HeartbeatService.SetBus(msgBus)
-	runningServices.HeartbeatService.SetHandler(createHeartbeatHandler(agentLoop))
+	runningServices.HeartbeatService.SetHandler(createHeartbeatHandler(ctx, agentLoop))
 	if err = runningServices.HeartbeatService.Start(); err != nil {
 		return nil, fmt.Errorf("error starting heartbeat service: %w", err)
 	}
@@ -492,7 +493,7 @@ func handleConfigReload(
 	if err != nil {
 		logger.Errorf("  ⚠ Error creating new provider: %v", err)
 		logger.Warn("  Attempting to restart services with old provider and config...")
-		if restartErr := restartServices(al, runningServices, msgBus); restartErr != nil {
+		if restartErr := restartServices(ctx, al, runningServices, msgBus); restartErr != nil {
 			logger.Errorf("  ⚠ Failed to restart services: %v", restartErr)
 		}
 		return fmt.Errorf("error creating new provider: %w", err)
@@ -502,7 +503,7 @@ func handleConfigReload(
 		newCfg.Agents.Defaults.ModelName = newModelID
 	}
 
-	reloadCtx, reloadCancel := context.WithTimeout(context.Background(), providerReloadTimeout)
+	reloadCtx, reloadCancel := context.WithTimeout(ctx, providerReloadTimeout)
 	defer reloadCancel()
 
 	if err := al.ReloadProviderAndConfig(reloadCtx, newProvider, newCfg); err != nil {
@@ -511,7 +512,7 @@ func handleConfigReload(
 			cp.Close()
 		}
 		logger.Warn("  Attempting to restart services with old provider and config...")
-		if restartErr := restartServices(al, runningServices, msgBus); restartErr != nil {
+		if restartErr := restartServices(reloadCtx, al, runningServices, msgBus); restartErr != nil {
 			logger.Errorf("  ⚠ Failed to restart services: %v", restartErr)
 		}
 		return fmt.Errorf("error reloading agent loop: %w", err)
@@ -520,7 +521,7 @@ func handleConfigReload(
 	*providerRef = newProvider
 
 	logger.Info("  Restarting all services with new configuration...")
-	if err := restartServices(al, runningServices, msgBus); err != nil {
+	if err := restartServices(reloadCtx, al, runningServices, msgBus); err != nil {
 		logger.Errorf("  ⚠ Error restarting services: %v", err)
 		return fmt.Errorf("error restarting services: %w", err)
 	}
@@ -539,6 +540,7 @@ func handleConfigReload(
 }
 
 func restartServices(
+	ctx context.Context,
 	al *agent.AgentLoop,
 	runningServices *services,
 	msgBus *bus.MessageBus,
@@ -569,7 +571,7 @@ func restartServices(
 		cfg.Heartbeat.Enabled,
 	)
 	runningServices.HeartbeatService.SetBus(msgBus)
-	runningServices.HeartbeatService.SetHandler(createHeartbeatHandler(al))
+	runningServices.HeartbeatService.SetHandler(createHeartbeatHandler(ctx, al))
 	if err = runningServices.HeartbeatService.Start(); err != nil {
 		return fmt.Errorf("error restarting heartbeat service: %w", err)
 	}
@@ -762,13 +764,13 @@ func overridePicoToken(cfg *config.Config, token string) {
 	cfg.Channels.Pico.SetToken(pico.PicoTokenPrefix + token + picoToken)
 }
 
-func createHeartbeatHandler(agentLoop *agent.AgentLoop) func(prompt, channel, chatID string) *tools.ToolResult {
+func createHeartbeatHandler(ctx context.Context, agentLoop *agent.AgentLoop) func(prompt, channel, chatID string) *tools.ToolResult {
 	return func(prompt, channel, chatID string) *tools.ToolResult {
 		if channel == "" || chatID == "" {
 			channel, chatID = "cli", "direct"
 		}
 
-		response, err := agentLoop.ProcessHeartbeat(context.Background(), prompt, channel, chatID)
+		response, err := agentLoop.ProcessHeartbeat(ctx, prompt, channel, chatID)
 		if err != nil {
 			return tools.ErrorResult(fmt.Sprintf("Heartbeat error: %v", err))
 		}
@@ -799,10 +801,14 @@ func RunCfg(ctx context.Context, cfg *config.Config, debug bool, allowEmptyStart
 	fmt.Printf("  • Tools: %d loaded\n", toolsInfo["count"])
 	fmt.Printf("  • Skills: %d/%d available\n", skillsInfo["available"], skillsInfo["total"])
 
-	runningServices, err := setupAndStartServices(cfg, agentLoop, msgBus, "")
+	runningServices, err := setupAndStartServices(ctx, cfg, agentLoop, msgBus, "")
 	if err != nil {
 		return err
 	}
+
+	defer func() {
+		shutdownGateway(runningServices, agentLoop, provider, true)
+	}()
 
 	// Setup manual reload channel for /reload endpoint
 	manualReloadChan := make(chan struct{}, 1)

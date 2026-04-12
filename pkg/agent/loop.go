@@ -453,16 +453,22 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 	idleTicker := time.NewTicker(100 * time.Millisecond)
 	defer idleTicker.Stop()
 
+	var wg sync.WaitGroup
+
 	for {
 		select {
 		case <-ctx.Done():
+			al.activeRequests.Wait()
+			wg.Wait()
 			return nil
 		case <-idleTicker.C:
 			if !al.running.Load() {
+				wg.Wait()
 				return nil
 			}
 		case msg, ok := <-al.bus.InboundChan():
 			if !ok {
+				wg.Wait()
 				return nil
 			}
 
@@ -473,7 +479,11 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 			if activeScope, activeAgentID, ok := al.resolveSteeringTarget(msg); ok {
 				drainCtx, cancel := context.WithCancel(ctx)
 				drainCancel = cancel
-				go al.drainBusToSteering(drainCtx, activeScope, activeAgentID)
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					al.drainBusToSteering(drainCtx, activeScope, activeAgentID)
+				}()
 			}
 
 			// Process message
@@ -1351,6 +1361,8 @@ func (al *AgentLoop) ProcessHeartbeat(
 }
 
 func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage) (string, error) {
+	al.activeRequests.Add(1)
+	defer al.activeRequests.Done()
 	// Add message preview to log (show full content for error messages)
 	var logContent string
 	if strings.Contains(msg.Content, "Error:") || strings.Contains(msg.Content, "error") {
@@ -2467,11 +2479,14 @@ turnLoop:
 			toolCallID := tc.ID
 			toolIteration := iteration
 			asyncToolName := toolName
-			asyncCallback := func(_ context.Context, result *tools.ToolResult) {
+			asyncCallback := func(ctx context.Context, result *tools.ToolResult) {
+				if ctx.Err() != nil {
+					return
+				}
 				// Send ForUser content directly to the user (immediate feedback),
 				// mirroring the synchronous tool execution path.
 				if !result.Silent && result.ForUser != "" {
-					outCtx, outCancel := context.WithTimeout(context.Background(), 5*time.Second)
+					outCtx, outCancel := context.WithTimeout(ctx, 5*time.Second)
 					defer outCancel()
 					_ = al.bus.PublishOutbound(outCtx, bus.OutboundMessage{
 						Channel:  ts.channel,
@@ -2507,7 +2522,7 @@ turnLoop:
 					},
 				)
 
-				pubCtx, pubCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				pubCtx, pubCancel := context.WithTimeout(ctx, 5*time.Second)
 				defer pubCancel()
 				_ = al.bus.PublishInbound(pubCtx, bus.InboundMessage{
 					Channel:  "system",

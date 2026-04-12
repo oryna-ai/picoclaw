@@ -34,12 +34,22 @@ func getFactory(name string) (ChannelFactory, bool) {
 	return f, ok
 }
 
-// RegisterCustomFactory registers a named channel factory. Called from subpackage init() functions.
+// RegisterCustomFactory ...
 func RegisterCustomFactory(name, displayName string, f ChannelFactory) {
 	factoriesMu.Lock()
 	defer factoriesMu.Unlock()
 	factories[name] = f
 	customMaps[name] = displayName
+}
+
+// UnregisterCustomFactories ...
+func UnregisterCustomFactories(names ...string) {
+	factoriesMu.Lock()
+	defer factoriesMu.Unlock()
+	for _, name := range names {
+		delete(factories, name)
+		delete(customMaps, name)
+	}
 }
 
 // getCustoms looks up a channel factory by name.
