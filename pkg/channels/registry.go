@@ -14,6 +14,9 @@ type ChannelFactory func(cfg *config.Config, bus *bus.MessageBus) (Channel, erro
 var (
 	factoriesMu sync.RWMutex
 	factories   = map[string]ChannelFactory{}
+
+	// add custom factory map
+	customMaps = map[string]string{}
 )
 
 // RegisterFactory registers a named channel factory. Called from subpackage init() functions.
@@ -29,4 +32,19 @@ func getFactory(name string) (ChannelFactory, bool) {
 	defer factoriesMu.RUnlock()
 	f, ok := factories[name]
 	return f, ok
+}
+
+// RegisterCustomFactory registers a named channel factory. Called from subpackage init() functions.
+func RegisterCustomFactory(name, displayName string, f ChannelFactory) {
+	factoriesMu.Lock()
+	defer factoriesMu.Unlock()
+	factories[name] = f
+	customMaps[name] = displayName
+}
+
+// getCustoms looks up a channel factory by name.
+func getCustoms() map[string]string {
+	factoriesMu.RLock()
+	defer factoriesMu.RUnlock()
+	return customMaps
 }
