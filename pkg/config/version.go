@@ -13,6 +13,7 @@ import (
 //	-X github.com/sipeed/picoclaw/pkg/config.BuildTime=<timestamp>
 //	-X github.com/sipeed/picoclaw/pkg/config.GoVersion=<go-version>
 var (
+	Name      = "picoclaw"
 	Version   = "dev" // Default value when not built with ldflags
 	GitCommit string  // Git commit SHA (short)
 	BuildTime string  // Build timestamp in RFC3339 format

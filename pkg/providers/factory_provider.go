@@ -131,7 +131,7 @@ func CreateProviderFromConfig(cfg *config.ModelConfig) (LLMProvider, string, err
 
 	userAgent := cfg.UserAgent
 	if userAgent == "" {
-		userAgent = fmt.Sprintf("PicoClaw/%s", config.Version)
+		userAgent = fmt.Sprintf("%s/%s", config.Name, config.Version)
 	}
 
 	switch protocol {

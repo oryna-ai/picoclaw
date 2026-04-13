@@ -458,8 +458,10 @@ func shutdownGateway(
 	provider providers.LLMProvider,
 	fullShutdown bool,
 ) {
-	if cp, ok := provider.(providers.StatefulProvider); ok && fullShutdown {
-		cp.Close()
+	if provider != nil {
+		if cp, ok := provider.(providers.StatefulProvider); ok && fullShutdown {
+			cp.Close()
+		}
 	}
 
 	stopAndCleanupServices(runningServices, gracefulShutdownTimeout, false)
@@ -782,15 +784,7 @@ func createHeartbeatHandler(ctx context.Context, agentLoop *agent.AgentLoop) fun
 }
 
 // RunCfg starts the gateway runtime using the configuration loaded from configPath.
-func RunCfg(ctx context.Context, cfg *config.Config, debug bool, allowEmptyStartup bool) error {
-	provider, modelID, err := createStartupProvider(cfg, allowEmptyStartup)
-	if err != nil {
-		return fmt.Errorf("error creating provider: %w", err)
-	}
-	if modelID != "" {
-		cfg.Agents.Defaults.ModelName = modelID
-	}
-
+func RunCfg(ctx context.Context, cfg *config.Config, provider providers.LLMProvider, debug bool) error {
 	msgBus := bus.NewMessageBus()
 	agentLoop := agent.NewAgentLoop(cfg, msgBus, provider)
 

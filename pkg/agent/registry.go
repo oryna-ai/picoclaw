@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"context"
+	"fmt"
 	"sync"
 
 	"github.com/sipeed/picoclaw/pkg/config"
@@ -33,6 +35,12 @@ func NewAgentRegistry(
 			ID:      "main",
 			Default: true,
 		}
+		if provider == nil {
+			var err error
+			if provider, _, err = providers.CreateProvider(cfg); err != nil {
+				provider = &startupBlockedProvider{reason: "no default model configured; gateway started in limited mode"}
+			}
+		}
 		instance := NewAgentInstance(implicitAgent, &cfg.Agents.Defaults, cfg, provider)
 		registry.agents["main"] = instance
 		logger.InfoCF("agent", "Created implicit main agent (no agents.list configured)", nil)
@@ -40,7 +48,41 @@ func NewAgentRegistry(
 		for i := range agentConfigs {
 			ac := &agentConfigs[i]
 			id := routing.NormalizeAgentID(ac.ID)
-			instance := NewAgentInstance(ac, &cfg.Agents.Defaults, cfg, provider)
+
+			// 为每个 agent 创建独立的提供者
+			agentProvider := provider // 默认使用传入的 provider
+			if agentProvider == nil {
+				// 如果传入的 provider 是 nil，为每个 agent 创建自己的提供者
+				modelName := ac.Model.Primary
+				if modelName == "" {
+					modelName = cfg.Agents.Defaults.ModelName
+				}
+				modelCfg, err := cfg.GetModelConfig(modelName)
+				if err != nil {
+					logger.ErrorCF("agent", "Failed to get model config for agent",
+						map[string]any{
+							"agent_id":   id,
+							"model_name": modelName,
+							"error":      err.Error(),
+						})
+					// 使用阻塞提供者作为回退
+					agentProvider = &startupBlockedProvider{reason: fmt.Sprintf("model %q not found for agent %q", modelName, id)}
+				} else {
+					var createErr error
+					agentProvider, _, createErr = providers.CreateProviderFromConfig(modelCfg)
+					if createErr != nil {
+						logger.ErrorCF("agent", "Failed to create provider for agent",
+							map[string]any{
+								"agent_id":   id,
+								"model_name": modelName,
+								"error":      createErr.Error(),
+							})
+						agentProvider = &startupBlockedProvider{reason: fmt.Sprintf("failed to create provider for model %q", modelName)}
+					}
+				}
+			}
+
+			instance := NewAgentInstance(ac, &cfg.Agents.Defaults, cfg, agentProvider)
 			registry.agents[id] = instance
 			logger.InfoCF("agent", "Registered agent",
 				map[string]any{
@@ -48,6 +90,7 @@ func NewAgentRegistry(
 					"name":      ac.Name,
 					"workspace": instance.Workspace,
 					"model":     instance.Model,
+					"provider":  fmt.Sprintf("%T", agentProvider), // 添加 provider 类型信息
 				})
 		}
 	}
@@ -137,4 +180,22 @@ func (r *AgentRegistry) GetDefaultAgent() *AgentInstance {
 		return agent
 	}
 	return nil
+}
+
+type startupBlockedProvider struct {
+	reason string
+}
+
+func (p *startupBlockedProvider) Chat(
+	_ context.Context,
+	_ []providers.Message,
+	_ []providers.ToolDefinition,
+	_ string,
+	_ map[string]any,
+) (*providers.LLMResponse, error) {
+	return nil, fmt.Errorf("%s", p.reason)
+}
+
+func (p *startupBlockedProvider) GetDefaultModel() string {
+	return ""
 }
