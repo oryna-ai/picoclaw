@@ -90,6 +90,7 @@ type ToolApprover interface {
 type LLMHookRequest struct {
 	Meta             EventMeta                  `json:"meta"`
 	Model            string                     `json:"model"`
+	ModelName        string                     `json:"model_name"`
 	Messages         []providers.Message        `json:"messages,omitempty"`
 	Tools            []providers.ToolDefinition `json:"tools,omitempty"`
 	Options          map[string]any             `json:"options,omitempty"`
@@ -110,11 +111,12 @@ func (r *LLMHookRequest) Clone() *LLMHookRequest {
 }
 
 type LLMHookResponse struct {
-	Meta     EventMeta              `json:"meta"`
-	Model    string                 `json:"model"`
-	Response *providers.LLMResponse `json:"response,omitempty"`
-	Channel  string                 `json:"channel,omitempty"`
-	ChatID   string                 `json:"chat_id,omitempty"`
+	Meta      EventMeta              `json:"meta"`
+	Model     string                 `json:"model"`
+	ModelName string                 `json:"model_name"`
+	Response  *providers.LLMResponse `json:"response,omitempty"`
+	Channel   string                 `json:"channel,omitempty"`
+	ChatID    string                 `json:"chat_id,omitempty"`
 }
 
 func (r *LLMHookResponse) Clone() *LLMHookResponse {

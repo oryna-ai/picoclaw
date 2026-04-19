@@ -1811,7 +1811,7 @@ func (al *AgentLoop) runTurn(ctx context.Context, ts *turnState) (turnResult, er
 		ts.recordPersistedMessage(rootMsg)
 		ts.ingestMessage(turnCtx, al, rootMsg)
 	}
-
+	activeModelName := ts.agent.Model
 	activeCandidates, activeModel, usedLight := al.selectCandidates(ts.agent, ts.userMessage, messages)
 	activeProvider := ts.agent.Provider
 	if usedLight && ts.agent.LightProvider != nil {
@@ -1972,10 +1972,12 @@ turnLoop:
 		}
 
 		llmModel := activeModel
+		llmModelName := activeModelName
 		if al.hooks != nil {
 			llmReq, decision := al.hooks.BeforeLLM(turnCtx, &LLMHookRequest{
 				Meta:             ts.eventMeta("runTurn", "turn.llm.request"),
 				Model:            llmModel,
+				ModelName:        llmModelName,
 				Messages:         callMessages,
 				Tools:            providerToolDefs,
 				Options:          llmOpts,
@@ -1987,6 +1989,7 @@ turnLoop:
 			case HookActionContinue, HookActionModify:
 				if llmReq != nil {
 					llmModel = llmReq.Model
+					llmModelName = llmReq.ModelName
 					callMessages = llmReq.Messages
 					providerToolDefs = llmReq.Tools
 					llmOpts = llmReq.Options
@@ -2211,11 +2214,12 @@ turnLoop:
 
 		if al.hooks != nil {
 			llmResp, decision := al.hooks.AfterLLM(turnCtx, &LLMHookResponse{
-				Meta:     ts.eventMeta("runTurn", "turn.llm.response"),
-				Model:    llmModel,
-				Response: response,
-				Channel:  ts.channel,
-				ChatID:   ts.chatID,
+				Meta:      ts.eventMeta("runTurn", "turn.llm.response"),
+				Model:     llmModel,
+				ModelName: llmModelName,
+				Response:  response,
+				Channel:   ts.channel,
+				ChatID:    ts.chatID,
 			})
 			switch decision.normalizedAction() {
 			case HookActionContinue, HookActionModify:

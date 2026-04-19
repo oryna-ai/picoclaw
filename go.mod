@@ -13,6 +13,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.12
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.50.4
 	github.com/bwmarrin/discordgo v0.29.0
+	github.com/bwmarrin/snowflake v0.3.0
 	github.com/caarlos0/env/v11 v11.4.0
 	github.com/creack/pty v1.1.24
 	github.com/ergochat/irc-go v0.6.0

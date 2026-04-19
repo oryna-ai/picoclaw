@@ -93,6 +93,7 @@ type Event struct {
 type EventMeta struct {
 	AgentID      string
 	TurnID       string
+	StateID      string
 	ParentTurnID string
 	SessionKey   string
 	Iteration    int

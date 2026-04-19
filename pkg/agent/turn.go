@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bwmarrin/snowflake"
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
@@ -54,6 +55,7 @@ type turnState struct {
 	scope turnEventScope
 
 	turnID     string
+	stateID    string
 	agentID    string
 	sessionKey string
 
@@ -108,12 +110,15 @@ type turnState struct {
 	al *AgentLoop
 }
 
+var _node, _ = snowflake.NewNode(32)
+
 func newTurnState(agent *AgentInstance, opts processOptions, scope turnEventScope) *turnState {
 	ts := &turnState{
 		agent:       agent,
 		opts:        opts,
 		scope:       scope,
 		turnID:      scope.turnID,
+		stateID:     _node.Generate().String(),
 		agentID:     agent.ID,
 		sessionKey:  opts.SessionKey,
 		channel:     opts.Channel,
@@ -304,6 +309,7 @@ func (ts *turnState) eventMeta(source, tracePath string) EventMeta {
 	return EventMeta{
 		AgentID:    snap.AgentID,
 		TurnID:     snap.TurnID,
+		StateID:    ts.stateID,
 		SessionKey: snap.SessionKey,
 		Iteration:  snap.Iteration,
 		Source:     source,
