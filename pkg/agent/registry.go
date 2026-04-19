@@ -53,7 +53,10 @@ func NewAgentRegistry(
 			agentProvider := provider // 默认使用传入的 provider
 			if agentProvider == nil {
 				// 如果传入的 provider 是 nil，为每个 agent 创建自己的提供者
-				modelName := ac.Model.Primary
+				modelName := ""
+				if ac.Model != nil {
+					modelName = ac.Model.Primary
+				}
 				if modelName == "" {
 					modelName = cfg.Agents.Defaults.ModelName
 				}

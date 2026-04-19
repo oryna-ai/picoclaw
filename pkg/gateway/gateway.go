@@ -785,6 +785,12 @@ func createHeartbeatHandler(ctx context.Context, agentLoop *agent.AgentLoop) fun
 
 // RunCfg starts the gateway runtime using the configuration loaded from configPath.
 func RunCfg(ctx context.Context, cfg *config.Config, provider providers.LLMProvider, debug bool) error {
+	if debug {
+		logger.SetLevel(logger.DEBUG)
+	} else {
+		logger.SetLevelFromString("fatal")
+	}
+
 	msgBus := bus.NewMessageBus()
 	agentLoop := agent.NewAgentLoop(cfg, msgBus, provider)
 

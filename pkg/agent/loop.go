@@ -1422,18 +1422,19 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 		})
 
 	opts := processOptions{
-		SessionKey:        sessionKey,
-		Channel:           msg.Channel,
-		ChatID:            msg.ChatID,
-		MessageID:         msg.MessageID,
-		ReplyToMessageID:  inboundMetadata(msg, metadataKeyReplyToMessage),
-		SenderID:          msg.SenderID,
-		SenderDisplayName: msg.Sender.DisplayName,
-		UserMessage:       msg.Content,
-		Media:             msg.Media,
-		DefaultResponse:   defaultResponse,
-		EnableSummary:     true,
-		SendResponse:      false,
+		SessionKey:           sessionKey,
+		Channel:              msg.Channel,
+		ChatID:               msg.ChatID,
+		MessageID:            msg.MessageID,
+		ReplyToMessageID:     inboundMetadata(msg, metadataKeyReplyToMessage),
+		SenderID:             msg.SenderID,
+		SenderDisplayName:    msg.Sender.DisplayName,
+		UserMessage:          msg.Content,
+		Media:                msg.Media,
+		DefaultResponse:      defaultResponse,
+		EnableSummary:        true,
+		SendResponse:         false,
+		SuppressToolFeedback: true,
 	}
 
 	// context-dependent commands check their own Runtime fields and report
