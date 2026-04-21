@@ -356,10 +356,11 @@ func (p *Pipeline) CallLLM(
 	// AfterLLM hook
 	if p.Hooks != nil {
 		llmResp, decision := p.Hooks.AfterLLM(turnCtx, &LLMHookResponse{
-			Meta:     ts.eventMeta("runTurn", "turn.llm.response"),
-			Context:  cloneTurnContext(ts.turnCtx),
-			Model:    exec.llmModel,
-			Response: exec.response,
+			Meta:      ts.eventMeta("runTurn", "turn.llm.response"),
+			Context:   cloneTurnContext(ts.turnCtx),
+			Model:     exec.llmModel,
+			ModelName: ts.agent.Model,
+			Response:  exec.response,
 		})
 		switch decision.normalizedAction() {
 		case HookActionContinue, HookActionModify:

@@ -80,27 +80,27 @@ func GetRegisteredFactoryNames() []string {
 	return names
 }
 
-// // RegisterCustomFactory ...
-// func RegisterCustomFactory(name, displayName string, f ChannelFactory) {
-// 	factoriesMu.Lock()
-// 	defer factoriesMu.Unlock()
-// 	factories[name] = f
-// 	customMaps[name] = displayName
-// }
+// RegisterCustomFactory ...
+func RegisterCustomFactory(name, displayName string, f ChannelFactory) {
+	factoriesMu.Lock()
+	defer factoriesMu.Unlock()
+	factories[name] = f
+	customMaps[name] = displayName
+}
 
-// // UnregisterCustomFactories ...
-// func UnregisterCustomFactories(names ...string) {
-// 	factoriesMu.Lock()
-// 	defer factoriesMu.Unlock()
-// 	for _, name := range names {
-// 		delete(factories, name)
-// 		delete(customMaps, name)
-// 	}
-// }
+// UnregisterCustomFactories ...
+func UnregisterCustomFactories(names ...string) {
+	factoriesMu.Lock()
+	defer factoriesMu.Unlock()
+	for _, name := range names {
+		delete(factories, name)
+		delete(customMaps, name)
+	}
+}
 
-// // getCustoms looks up a channel factory by name.
-// func getCustoms() map[string]string {
-// 	factoriesMu.RLock()
-// 	defer factoriesMu.RUnlock()
-// 	return customMaps
-// }
+// getCustoms looks up a channel factory by name.
+func getCustoms() map[string]string {
+	factoriesMu.RLock()
+	defer factoriesMu.RUnlock()
+	return customMaps
+}

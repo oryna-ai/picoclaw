@@ -526,9 +526,10 @@ func (al *AgentLoop) askSideQuestion(
 				TracePath:   "turn.llm.response",
 				turnContext: cloneTurnContext(turnCtx),
 			},
-			Context:  cloneTurnContext(turnCtx),
-			Model:    llmModel,
-			Response: resp,
+			Context:   cloneTurnContext(turnCtx),
+			Model:     llmModel,
+			ModelName: agent.Model,
+			Response:  resp,
 		})
 		switch decision.normalizedAction() {
 		case HookActionContinue, HookActionModify:

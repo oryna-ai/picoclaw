@@ -466,9 +466,9 @@ func (m *Manager) initChannels(channels *config.ChannelsConfig) error {
 	}
 
 	// Always add customs initialize channel for frontend communication
-	// for key, value := range getCustoms() {
-	// 	m.initChannel(key, value)
-	// }
+	for key, value := range getCustoms() {
+		m.initChannel(key, value)
+	}
 
 	logger.InfoCF("channels", "Channel initialization completed", map[string]any{
 		"enabled_channels": len(m.channels),
