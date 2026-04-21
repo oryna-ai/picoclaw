@@ -1,4 +1,4 @@
-//go:build !mipsle && !netbsd
+//go:build !mipsle && !netbsd && !(freebsd && arm)
 
 package agent
 
@@ -152,6 +152,19 @@ func (m *seahorseContextManager) Ingest(ctx context.Context, req *IngestRequest)
 	msg := providerToSeahorseMessage(req.Message)
 	_, err := m.engine.Ingest(ctx, req.SessionKey, []seahorse.Message{msg})
 	return err
+}
+
+// Clear removes all stored context for a session (seahorse DB + JSONL).
+func (m *seahorseContextManager) Clear(ctx context.Context, sessionKey string) error {
+	if err := m.engine.ClearSession(ctx, sessionKey); err != nil {
+		return err
+	}
+	if m.sessions != nil {
+		m.sessions.SetHistory(sessionKey, []providers.Message{})
+		m.sessions.SetSummary(sessionKey, "")
+		return m.sessions.Save(sessionKey)
+	}
+	return nil
 }
 
 // bootstrapSession reconciles JSONL session history into seahorse SQLite.

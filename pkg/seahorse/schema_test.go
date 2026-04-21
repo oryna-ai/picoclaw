@@ -2,14 +2,26 @@ package seahorse
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	_ "modernc.org/sqlite"
 )
 
+var testDBCounter uint64
+
 func openTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite", ":memory:")
+
+	n := atomic.AddUint64(&testDBCounter, 1)
+	testName := strings.NewReplacer("/", "_", " ", "_").Replace(t.Name())
+	// Use a shared in-memory database so concurrent goroutines/connections in tests
+	// observe the same schema/data.
+	dsn := fmt.Sprintf("file:seahorse_test_%s_%d?mode=memory&cache=shared", testName, n)
+
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
@@ -179,6 +191,84 @@ func TestMigrationSummaryParentsPK(t *testing.T) {
 		"INSERT INTO summary_parents (summary_id, parent_summary_id) VALUES ('sum_a', 'sum_b')")
 	if err == nil {
 		t.Error("expected unique constraint violation for duplicate summary_parents link")
+	}
+}
+
+func TestTriggerMigration(t *testing.T) {
+	db := openTestDB(t)
+
+	// Run schema once to create tables and (correct) triggers
+	if err := runSchema(db); err != nil {
+		t.Fatalf("runSchema: %v", err)
+	}
+
+	// Drop correct triggers and recreate them with the old buggy body.
+	// The old trigger used INSERT INTO fts VALUES('delete', ...) which is wrong
+	// for non-external-content FTS5 tables.
+	oldSummariesDelete := `CREATE TRIGGER summaries_ad AFTER DELETE ON summaries BEGIN
+		INSERT INTO summaries_fts (summaries_fts, summary_id, content) VALUES('delete', old.summary_id, old.content);
+	END`
+	oldMessagesDelete := `CREATE TRIGGER messages_ad AFTER DELETE ON messages BEGIN
+		INSERT INTO messages_fts (messages_fts, message_id, content) VALUES('delete', old.message_id, old.content);
+	END`
+
+	for _, sql := range []string{
+		`DROP TRIGGER IF EXISTS summaries_ad`,
+		`DROP TRIGGER IF EXISTS messages_ad`,
+		oldSummariesDelete,
+		oldMessagesDelete,
+	} {
+		if _, err := db.Exec(sql); err != nil {
+			t.Fatalf("setup old trigger: %v", err)
+		}
+	}
+
+	// Insert a conversation and summary so we have something to delete
+	_, err := db.Exec(`INSERT INTO conversations (session_key) VALUES ('old-db-test')`)
+	if err != nil {
+		t.Fatalf("insert conversation: %v", err)
+	}
+	_, err = db.Exec(`INSERT INTO summaries (summary_id, conversation_id, kind, depth, content, token_count)
+		VALUES ('old-sum', 1, 'leaf', 0, 'old content', 5)`)
+	if err != nil {
+		t.Fatalf("insert summary: %v", err)
+	}
+
+	// The old trigger body is wrong for normal FTS5 — DELETE should fail.
+	_, err = db.Exec(`DELETE FROM summaries WHERE summary_id = 'old-sum'`)
+	if err == nil {
+		t.Error("expected error from old buggy trigger, but DELETE succeeded")
+	} else {
+		t.Logf("old trigger correctly causes error: %v", err)
+	}
+
+	// Now runSchema again — this drops and recreates the triggers with correct bodies.
+	err = runSchema(db)
+	if err != nil {
+		t.Fatalf("runSchema migration: %v", err)
+	}
+
+	// Insert again so we have data to delete
+	_, err = db.Exec(`INSERT INTO summaries (summary_id, conversation_id, kind, depth, content, token_count)
+		VALUES ('migrated-sum', 1, 'leaf', 0, 'new content', 5)`)
+	if err != nil {
+		t.Fatalf("insert after migration: %v", err)
+	}
+
+	// DELETE should now work with the corrected trigger body.
+	_, err = db.Exec(`DELETE FROM summaries WHERE summary_id = 'migrated-sum'`)
+	if err != nil {
+		t.Fatalf("DELETE after migration failed (trigger not corrected): %v", err)
+	}
+
+	// Verify the summary is gone
+	var count int
+	err = db.QueryRow(`SELECT count(*) FROM summaries WHERE summary_id = 'migrated-sum'`).Scan(&count)
+	if err != nil {
+		t.Fatalf("query after delete: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("summary should be gone after DELETE, got count=%d", count)
 	}
 }
 

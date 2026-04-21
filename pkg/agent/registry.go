@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/config"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
@@ -110,9 +111,9 @@ func (r *AgentRegistry) GetAgent(agentID string) (*AgentInstance, bool) {
 	return agent, ok
 }
 
-// ResolveRoute determines which agent handles the message.
-func (r *AgentRegistry) ResolveRoute(input routing.RouteInput) routing.ResolvedRoute {
-	return r.resolver.ResolveRoute(input)
+// ResolveRoute determines which agent handles the normalized inbound context.
+func (r *AgentRegistry) ResolveRoute(inbound bus.InboundContext) routing.ResolvedRoute {
+	return r.resolver.ResolveRoute(inbound)
 }
 
 // ListAgentIDs returns all registered agent IDs.
