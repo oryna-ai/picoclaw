@@ -479,11 +479,9 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 			if activeScope, activeAgentID, ok := al.resolveSteeringTarget(msg); ok {
 				drainCtx, cancel := context.WithCancel(ctx)
 				drainCancel = cancel
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+				wg.Go(func() {
 					al.drainBusToSteering(drainCtx, activeScope, activeAgentID)
-				}()
+				})
 			}
 
 			// Process message
@@ -637,7 +635,7 @@ func (al *AgentLoop) drainBusToSteering(ctx context.Context, activeScope, active
 
 		msgScope, _, scopeOK := al.resolveSteeringTarget(msg)
 		if !scopeOK || msgScope != activeScope {
-			if err := al.requeueInboundMessage(msg, activeAgentID); err != nil {
+			if err := al.requeueInboundMessage(ctx, msg); err != nil {
 				logger.WarnCF("agent", "Failed to requeue non-steering inbound message", map[string]any{
 					"error":     err.Error(),
 					"channel":   msg.Channel,
@@ -691,17 +689,6 @@ func (al *AgentLoop) PublishResponseIfNeeded(ctx context.Context, channel, chatI
 		}
 	}
 
-	// 从上下文中获取当前 agentID
-	agentID := ""
-	ts := turnStateFromContext(ctx)
-	if ts != nil {
-		agentID = ts.agentID
-	} else {
-		if defaultAgent != nil {
-			agentID = defaultAgent.ID
-		}
-	}
-
 	if alreadySent {
 		logger.DebugCF(
 			"agent",
@@ -711,17 +698,23 @@ func (al *AgentLoop) PublishResponseIfNeeded(ctx context.Context, channel, chatI
 		return
 	}
 
+	// TODO: 从消息头中获取当前 agentID,stateID
+	stateID, agentID, content := matchTurnState(response)
+
 	al.bus.PublishOutbound(ctx, bus.OutboundMessage{
-		Channel:  channel,
-		ChatID:   chatID,
-		Content:  response,
-		Metadata: map[string]string{"agent_id": agentID},
+		Channel: channel,
+		ChatID:  chatID,
+		Content: content,
+		Metadata: map[string]string{
+			"agent_id": agentID,
+			"state_id": stateID,
+		},
 	})
 	logger.InfoCF("agent", "Published outbound response",
 		map[string]any{
 			"channel":     channel,
 			"chat_id":     chatID,
-			"content_len": len(response),
+			"content_len": len(content),
 		})
 }
 
@@ -1327,7 +1320,13 @@ func (al *AgentLoop) ProcessDirectWithChannel(
 		SessionKey: sessionKey,
 	}
 
-	return al.processMessage(ctx, msg)
+	response, err := al.processMessage(ctx, msg)
+	if err != nil {
+		return "", err
+	}
+	_, _, _response := matchTurnState(response)
+
+	return _response, nil
 }
 
 // ProcessHeartbeat processes a heartbeat request without session history.
@@ -1497,17 +1496,25 @@ func (al *AgentLoop) resolveSteeringTarget(msg bus.InboundMessage) (string, stri
 	return resolveScopeKey(route, msg.SessionKey), agent.ID, true
 }
 
-func (al *AgentLoop) requeueInboundMessage(msg bus.InboundMessage, activeAgentID string) error {
+func (al *AgentLoop) requeueInboundMessage(ctx context.Context, msg bus.InboundMessage) error {
 	if al.bus == nil {
 		return nil
 	}
-	pubCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	metadata := map[string]string{}
+	ts := turnStateFromContext(ctx)
+	if ts != nil {
+		metadata = map[string]string{
+			"agent_id": ts.agentID,
+			"state_id": ts.stateID,
+		}
+	}
+	pubCtx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 	return al.bus.PublishOutbound(pubCtx, bus.OutboundMessage{
 		Channel:  msg.Channel,
 		ChatID:   msg.ChatID,
 		Content:  msg.Content,
-		Metadata: map[string]string{"agent_id": activeAgentID},
+		Metadata: metadata,
 	})
 }
 
@@ -1616,10 +1623,13 @@ func (al *AgentLoop) runAgentLoop(
 
 	if opts.SendResponse && result.finalContent != "" {
 		al.bus.PublishOutbound(ctx, bus.OutboundMessage{
-			Channel:  opts.Channel,
-			ChatID:   opts.ChatID,
-			Content:  result.finalContent,
-			Metadata: map[string]string{"agent_id": ts.agentID},
+			Channel: opts.Channel,
+			ChatID:  opts.ChatID,
+			Content: result.finalContent,
+			Metadata: map[string]string{
+				"agent_id": ts.agentID,
+				"state_id": ts.stateID,
+			},
 		})
 	}
 
@@ -1633,8 +1643,8 @@ func (al *AgentLoop) runAgentLoop(
 				"final_length": len(result.finalContent),
 			})
 	}
-
-	return result.finalContent, nil
+	// TODO:
+	return fmt.Sprintf("<TurnState>%s@%s</TurnState>:", ts.stateID, ts.agentID) + result.finalContent, nil
 }
 
 func (al *AgentLoop) targetReasoningChannelID(channelName string) (chatID string) {
@@ -2151,10 +2161,13 @@ turnLoop:
 
 				if retry == 0 && !constants.IsInternalChannel(ts.channel) {
 					al.bus.PublishOutbound(ctx, bus.OutboundMessage{
-						Channel:  ts.channel,
-						ChatID:   ts.chatID,
-						Content:  "Context window exceeded. Compressing history and retrying...",
-						Metadata: map[string]string{"agent_id": ts.agentID},
+						Channel: ts.channel,
+						ChatID:  ts.chatID,
+						Content: "Context window exceeded. Compressing history and retrying...",
+						Metadata: map[string]string{
+							"agent_id": ts.agentID,
+							"state_id": ts.stateID,
+						},
 					})
 				}
 
@@ -2473,10 +2486,13 @@ turnLoop:
 				feedbackMsg := fmt.Sprintf("\U0001f527 `%s`\n```\n%s\n```", tc.Name, feedbackPreview)
 				fbCtx, fbCancel := context.WithTimeout(turnCtx, 3*time.Second)
 				_ = al.bus.PublishOutbound(fbCtx, bus.OutboundMessage{
-					Channel:  ts.channel,
-					ChatID:   ts.chatID,
-					Content:  feedbackMsg,
-					Metadata: map[string]string{"agent_id": ts.agentID},
+					Channel: ts.channel,
+					ChatID:  ts.chatID,
+					Content: feedbackMsg,
+					Metadata: map[string]string{
+						"agent_id": ts.agentID,
+						"state_id": ts.stateID,
+					},
 				})
 				fbCancel()
 			}
@@ -2494,10 +2510,13 @@ turnLoop:
 					outCtx, outCancel := context.WithTimeout(ctx, 5*time.Second)
 					defer outCancel()
 					_ = al.bus.PublishOutbound(outCtx, bus.OutboundMessage{
-						Channel:  ts.channel,
-						ChatID:   ts.chatID,
-						Content:  result.ForUser,
-						Metadata: map[string]string{"agent_id": ts.agentID},
+						Channel: ts.channel,
+						ChatID:  ts.chatID,
+						Content: result.ForUser,
+						Metadata: map[string]string{
+							"agent_id": ts.agentID,
+							"state_id": ts.stateID,
+						},
 					})
 				}
 
@@ -2607,6 +2626,7 @@ turnLoop:
 					Metadata: map[string]string{
 						"is_tool_call": "true",
 						"agent_id":     ts.agentID,
+						"state_id":     ts.stateID,
 					},
 				})
 				logger.DebugCF("agent", "Sent tool result to user",
@@ -3464,4 +3484,16 @@ func extractProvider(registry *AgentRegistry) (providers.LLMProvider, bool) {
 		return nil, false
 	}
 	return defaultAgent.Provider, true
+}
+
+var turnStateRegex = regexp.MustCompile(`(?s)<TurnState>([^@]+)@([^<]+)</TurnState>:(.*)`)
+
+func matchTurnState(response string) (stateID, agentID, content string) {
+	content = response
+	if strings.HasPrefix(response, "<TurnState>") {
+		if matches := turnStateRegex.FindStringSubmatch(response); len(matches) == 4 {
+			stateID, agentID, content = matches[1], matches[2], matches[3]
+		}
+	}
+	return
 }

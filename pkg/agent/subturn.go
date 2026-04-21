@@ -374,6 +374,7 @@ func spawnSubTurn(
 	// Create child turnState using the new API
 	childTS := newTurnState(&agent, opts, scope)
 
+	childTS.stateID = parentTS.stateID
 	// Set SubTurn-specific fields
 	childTS.cancelFunc = cancel
 	childTS.critical = cfg.Critical
