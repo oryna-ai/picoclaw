@@ -19,6 +19,11 @@ func (al *AgentLoop) newTurnEventScope(agentID, sessionKey string, turnCtx *Turn
 }
 
 func (ts turnEventScope) meta(iteration int, source, tracePath string) EventMeta {
+	var channel, chatID string
+	if ts.context != nil {
+		channel = ts.context.GetChannel()
+		chatID = ts.context.GetChatID()
+	}
 	return EventMeta{
 		AgentID:     ts.agentID,
 		TurnID:      ts.turnID,
@@ -26,6 +31,8 @@ func (ts turnEventScope) meta(iteration int, source, tracePath string) EventMeta
 		Iteration:   iteration,
 		Source:      source,
 		TracePath:   tracePath,
+		Channel:     channel,
+		ChatID:      chatID,
 		turnContext: cloneTurnContext(ts.context),
 	}
 }

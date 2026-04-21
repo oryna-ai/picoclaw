@@ -446,13 +446,16 @@ func (ts *turnState) hardAbortRequested() bool {
 func (ts *turnState) eventMeta(source, tracePath string) EventMeta {
 	snap := ts.snapshot()
 	return EventMeta{
-		AgentID:    snap.AgentID,
-		TurnID:     snap.TurnID,
-		StateID:    ts.stateID,
-		SessionKey: snap.SessionKey,
-		Iteration:  snap.Iteration,
-		Source:     source,
-		TracePath:  tracePath,
+		AgentID:     snap.AgentID,
+		TurnID:      snap.TurnID,
+		StateID:     ts.stateID,
+		SessionKey:  snap.SessionKey,
+		Iteration:   snap.Iteration,
+		Source:      source,
+		TracePath:   tracePath,
+		Channel:     ts.channel,
+		ChatID:      ts.chatID,
+		turnContext: cloneTurnContext(ts.turnCtx),
 	}
 }
 

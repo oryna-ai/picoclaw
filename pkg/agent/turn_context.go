@@ -90,3 +90,19 @@ func cloneIdentityLinks(src map[string][]string) map[string][]string {
 	}
 	return cloned
 }
+
+// GetChannel returns the channel from the TurnContext, if available.
+func (tc *TurnContext) GetChannel() string {
+	if tc == nil || tc.Inbound == nil {
+		return ""
+	}
+	return tc.Inbound.Channel
+}
+
+// GetChatID returns the chat ID from the TurnContext, if available.
+func (tc *TurnContext) GetChatID() string {
+	if tc == nil || tc.Inbound == nil {
+		return ""
+	}
+	return tc.Inbound.ChatID
+}

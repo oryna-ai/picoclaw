@@ -100,6 +100,8 @@ type EventMeta struct {
 	Iteration    int
 	TracePath    string
 	Source       string
+	Channel      string
+	ChatID       string
 	turnContext  *TurnContext
 }
 

@@ -417,6 +417,8 @@ func (al *AgentLoop) askSideQuestion(
 			Meta: EventMeta{
 				Source:      "askSideQuestion",
 				TracePath:   "turn.llm.request",
+				Channel:     turnCtx.GetChannel(),
+				ChatID:      turnCtx.GetChatID(),
 				turnContext: cloneTurnContext(turnCtx),
 			},
 			Context:          cloneTurnContext(turnCtx),
@@ -498,6 +500,8 @@ func (al *AgentLoop) askSideQuestion(
 			EventMeta{
 				Source:      "askSideQuestion",
 				TracePath:   "turn.llm.retry",
+				Channel:     turnCtx.GetChannel(),
+				ChatID:      turnCtx.GetChatID(),
 				turnContext: cloneTurnContext(turnCtx),
 			},
 			LLMRetryPayload{
@@ -524,6 +528,8 @@ func (al *AgentLoop) askSideQuestion(
 			Meta: EventMeta{
 				Source:      "askSideQuestion",
 				TracePath:   "turn.llm.response",
+				Channel:     turnCtx.GetChannel(),
+				ChatID:      turnCtx.GetChatID(),
 				turnContext: cloneTurnContext(turnCtx),
 			},
 			Context:   cloneTurnContext(turnCtx),
