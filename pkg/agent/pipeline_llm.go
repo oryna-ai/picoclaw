@@ -304,6 +304,10 @@ func (p *Pipeline) CallLLM(
 				SessionKey: ts.sessionKey,
 				Reason:     ContextCompressReasonRetry,
 				Budget:     ts.agent.ContextWindow,
+				Channel:    ts.channel,
+				ChatID:     ts.chatID,
+				AgentID:    ts.agent.ID,
+				StateID:    ts.stateID,
 			}); compactErr != nil {
 				logger.WarnCF("agent", "Context overflow compact failed", map[string]any{
 					"session_key": ts.sessionKey,

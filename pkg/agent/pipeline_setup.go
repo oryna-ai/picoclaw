@@ -54,6 +54,10 @@ func (p *Pipeline) SetupTurn(ctx context.Context, ts *turnState) (*turnExecution
 				SessionKey: ts.sessionKey,
 				Reason:     ContextCompressReasonProactive,
 				Budget:     ts.agent.ContextWindow,
+				Channel:    ts.channel,
+				ChatID:     ts.chatID,
+				AgentID:    ts.agent.ID,
+				StateID:    ts.stateID,
 			}); err != nil {
 				logger.WarnCF("agent", "Proactive compact failed", map[string]any{
 					"session_key": ts.sessionKey,

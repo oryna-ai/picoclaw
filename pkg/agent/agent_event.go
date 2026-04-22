@@ -18,6 +18,19 @@ func (al *AgentLoop) newTurnEventScope(agentID, sessionKey string, turnCtx *Turn
 	}
 }
 
+// newTurnEventScopeWithStateID creates a turnEventScope with a pre-defined StateID
+// This is used when we want related turns to share the same StateID
+func (al *AgentLoop) newTurnEventScopeWithStateID(agentID, sessionKey, stateID string, turnCtx *TurnContext) turnEventScope {
+	seq := al.turnSeq.Add(1)
+	return turnEventScope{
+		agentID:    agentID,
+		sessionKey: sessionKey,
+		turnID:     fmt.Sprintf("%s-turn-%d", agentID, seq),
+		stateID:    stateID,
+		context:    cloneTurnContext(turnCtx),
+	}
+}
+
 func (ts turnEventScope) meta(iteration int, source, tracePath string) EventMeta {
 	var channel, chatID string
 	if ts.context != nil {
@@ -27,6 +40,7 @@ func (ts turnEventScope) meta(iteration int, source, tracePath string) EventMeta
 	return EventMeta{
 		AgentID:     ts.agentID,
 		TurnID:      ts.turnID,
+		StateID:     ts.stateID,
 		SessionKey:  ts.sessionKey,
 		Iteration:   iteration,
 		Source:      source,

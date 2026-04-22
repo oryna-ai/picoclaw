@@ -384,7 +384,7 @@ toolLoop:
 				})
 			al.emitEvent(
 				EventKindFollowUpQueued,
-				ts.scope.meta(iteration, "runTurn", "turn.follow_up.queued"),
+				ts.eventMeta("runTurn", "turn.follow_up.queued"),
 				FollowUpQueuedPayload{
 					SourceTool: asyncToolName,
 					ContentLen: len(content),
@@ -676,6 +676,10 @@ toolLoop:
 				SessionKey: ts.sessionKey,
 				Reason:     ContextCompressReasonSummarize,
 				Budget:     ts.agent.ContextWindow,
+				Channel:    ts.channel,
+				ChatID:     ts.chatID,
+				AgentID:    ts.agent.ID,
+				StateID:    ts.stateID,
 			})
 		}
 		ts.setPhase(TurnPhaseCompleted)

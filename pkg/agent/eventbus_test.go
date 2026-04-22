@@ -512,7 +512,7 @@ func TestAgentLoop_EmitsSessionSummarizeEvent(t *testing.T) {
 	defer al.UnsubscribeEvents(sub.ID)
 
 	lcm := &legacyContextManager{al: al}
-	lcm.summarizeSession(defaultAgent, "session-1")
+	lcm.summarizeSession(defaultAgent, "session-1", "", "", "")
 
 	events := collectEventStream(sub.C)
 	summaryEvt, ok := findEvent(events, EventKindSessionSummarize)

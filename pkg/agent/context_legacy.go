@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
@@ -40,9 +41,17 @@ func (m *legacyContextManager) Compact(_ context.Context, req *CompactRequest) e
 	case ContextCompressReasonProactive, ContextCompressReasonRetry:
 		// Sync emergency compression — budget exceeded.
 		if result, ok := m.forceCompression(req.SessionKey); ok {
+			turnCtx := &TurnContext{
+				Inbound: &bus.InboundContext{
+					Channel: req.Channel,
+					ChatID:  req.ChatID,
+				},
+			}
+			scope := m.al.newTurnEventScope(req.AgentID, req.SessionKey, turnCtx)
+			scope.stateID = req.StateID
 			m.al.emitEvent(
 				EventKindContextCompress,
-				m.al.newTurnEventScope("", req.SessionKey, nil).meta(0, "forceCompression", "turn.context.compress"),
+				scope.meta(0, "forceCompression", "turn.context.compress"),
 				ContextCompressPayload{
 					Reason:            req.Reason,
 					DroppedMessages:   result.DroppedMessages,
@@ -51,7 +60,7 @@ func (m *legacyContextManager) Compact(_ context.Context, req *CompactRequest) e
 			)
 		}
 	case ContextCompressReasonSummarize:
-		m.maybeSummarize(req.SessionKey)
+		m.maybeSummarize(req.SessionKey, req.Channel, req.ChatID, req.StateID)
 	}
 	return nil
 }
@@ -73,7 +82,7 @@ func (m *legacyContextManager) Clear(_ context.Context, sessionKey string) error
 
 // maybeSummarize triggers summarization if the session history exceeds thresholds.
 // It runs asynchronously in a goroutine.
-func (m *legacyContextManager) maybeSummarize(sessionKey string) {
+func (m *legacyContextManager) maybeSummarize(sessionKey, channel, chatID, stateID string) {
 	agent := m.al.registry.GetDefaultAgent()
 	if agent == nil {
 		return
@@ -97,7 +106,7 @@ func (m *legacyContextManager) maybeSummarize(sessionKey string) {
 					}
 				}()
 				logger.Debug("Memory threshold reached. Optimizing conversation history...")
-				m.summarizeSession(agent, sessionKey)
+				m.summarizeSession(agent, sessionKey, channel, chatID, stateID)
 			}()
 		}
 	}
@@ -168,7 +177,7 @@ func (m *legacyContextManager) forceCompression(sessionKey string) (compressionR
 	}, true
 }
 
-func (m *legacyContextManager) summarizeSession(agent *AgentInstance, sessionKey string) {
+func (m *legacyContextManager) summarizeSession(agent *AgentInstance, sessionKey, channel, chatID, stateID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
@@ -245,9 +254,17 @@ func (m *legacyContextManager) summarizeSession(agent *AgentInstance, sessionKey
 		agent.Sessions.SetSummary(sessionKey, finalSummary)
 		agent.Sessions.TruncateHistory(sessionKey, keepCount)
 		agent.Sessions.Save(sessionKey)
+		turnCtx := &TurnContext{
+			Inbound: &bus.InboundContext{
+				Channel: channel,
+				ChatID:  chatID,
+			},
+		}
+		scope := m.al.newTurnEventScope(agent.ID, sessionKey, turnCtx)
+		scope.stateID = stateID
 		m.al.emitEvent(
 			EventKindSessionSummarize,
-			m.al.newTurnEventScope(agent.ID, sessionKey, nil).meta(0, "summarizeSession", "turn.session.summarize"),
+			scope.meta(0, "summarizeSession", "turn.session.summarize"),
 			SessionSummarizePayload{
 				SummarizedMessages: len(validMessages),
 				KeptMessages:       keepCount,

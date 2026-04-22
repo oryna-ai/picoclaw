@@ -301,6 +301,7 @@ type turnEventScope struct {
 	agentID    string
 	sessionKey string
 	turnID     string
+	stateID    string
 	context    *TurnContext
 }
 

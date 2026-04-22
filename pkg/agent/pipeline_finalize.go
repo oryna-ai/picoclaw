@@ -64,6 +64,10 @@ func (p *Pipeline) Finalize(
 				SessionKey: ts.sessionKey,
 				Reason:     ContextCompressReasonSummarize,
 				Budget:     ts.agent.ContextWindow,
+				Channel:    ts.channel,
+				ChatID:     ts.chatID,
+				AgentID:    ts.agent.ID,
+				StateID:    ts.stateID,
 			},
 		)
 	}

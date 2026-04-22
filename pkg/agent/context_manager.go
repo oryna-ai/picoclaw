@@ -48,6 +48,10 @@ type CompactRequest struct {
 	SessionKey string                // session identifier
 	Reason     ContextCompressReason // proactive_budget | llm_retry | summarize
 	Budget     int                   // context window budget (used for retry aggressive compaction)
+	Channel    string                // channel for event metadata
+	ChatID     string                // chat ID for event metadata
+	AgentID    string                // agent ID for event metadata
+	StateID    string                // state ID for event metadata
 }
 
 // IngestRequest is the input to Ingest.
