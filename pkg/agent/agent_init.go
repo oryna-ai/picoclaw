@@ -26,7 +26,12 @@ func NewAgentLoop(
 	provider providers.LLMProvider,
 ) *AgentLoop {
 	registry := NewAgentRegistry(cfg, provider)
-
+	// provider == nil
+	if provider == nil {
+		if ag, ok := registry.agents["main"]; ok {
+			provider = ag.Provider
+		}
+	}
 	// Set up shared fallback chain with rate limiting.
 	cooldown := providers.NewCooldownTracker()
 	rl := providers.NewRateLimiterRegistry()

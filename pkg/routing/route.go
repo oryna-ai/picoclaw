@@ -149,16 +149,36 @@ func cloneIdentityLinks(src map[string][]string) map[string][]string {
 }
 
 type dispatchView struct {
-	Channel   string
-	Account   string
-	Space     string
-	Chat      string
-	Topic     string
-	Sender    string
-	Mentioned bool
+	Channel     string
+	Account     string
+	Space       string
+	Chat        string
+	Topic       string
+	Sender      string
+	Mentioned   bool
+	CustomAgent string // 从Raw中提取的agent_id
 }
 
 func (r *RouteResolver) matchDispatchRule(view dispatchView) *config.DispatchRule {
+	// 优先使用CustomAgent（从Raw中提取的agent_id）
+	if view.CustomAgent != "" {
+		// 验证agent是否存在
+		normalized := NormalizeAgentID(view.CustomAgent)
+		for _, a := range r.cfg.Agents.List {
+			if NormalizeAgentID(a.ID) == normalized {
+				// 返回一个虚拟规则，使用指定的agent
+				return &config.DispatchRule{
+					Name:  "raw-agent-override",
+					Agent: view.CustomAgent,
+					When:  config.DispatchSelector{},
+				}
+			}
+		}
+		// agent不存在，记录警告但继续正常路由
+		// 在实际生产环境中可以添加日志
+	}
+
+	// 正常规则匹配
 	if r.cfg == nil || r.cfg.Agents.Dispatch == nil || len(r.cfg.Agents.Dispatch.Rules) == 0 {
 		return nil
 	}
@@ -240,6 +260,13 @@ func buildDispatchView(inbound bus.InboundContext, identityLinks map[string][]st
 	}
 
 	view.Sender = canonicalDispatchSenderID(inbound.Channel, inbound.SenderID, identityLinks)
+
+	// 从Raw中提取agent_id
+	if inbound.Raw != nil {
+		if agentID, ok := inbound.Raw["agent_id"]; ok && agentID != "" {
+			view.CustomAgent = strings.ToLower(strings.TrimSpace(agentID))
+		}
+	}
 
 	return view
 }

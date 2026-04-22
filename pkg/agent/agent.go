@@ -313,9 +313,9 @@ func (al *AgentLoop) ReloadProviderAndConfig(
 	cfg *config.Config,
 ) error {
 	// Validate inputs
-	if provider == nil {
-		return fmt.Errorf("provider cannot be nil")
-	}
+	// if provider == nil {
+	// 	return fmt.Errorf("provider cannot be nil")
+	// }
 	if cfg == nil {
 		return fmt.Errorf("config cannot be nil")
 	}
@@ -359,6 +359,11 @@ func (al *AgentLoop) ReloadProviderAndConfig(
 	}
 
 	// Ensure shared tools are re-registered on the new registry
+	if provider == nil {
+		if ag, ok := al.registry.agents["main"]; ok {
+			provider = ag.Provider
+		}
+	}
 	registerSharedTools(al, cfg, al.bus, registry, provider)
 
 	// Atomically swap the config and registry under write lock
