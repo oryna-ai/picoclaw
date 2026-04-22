@@ -808,17 +808,33 @@ func createHeartbeatHandler(ctx context.Context, agentLoop *agent.AgentLoop) fun
 	}
 }
 
+// Controller 控制网关运行时的结构体
+type Controller struct {
+	Reload chan<- *config.Config // 配置重载通道（可写）
+	Stop   context.CancelFunc    // 停止运行时
+	Done   <-chan struct{}       // 运行时完成信号
+	Err    <-chan error          // 运行时错误
+}
+
 // RunCfg starts the gateway runtime using the configuration loaded from configPath.
-func RunCfg(ctx context.Context, cfg *config.Config, provider providers.LLMProvider, debug bool) error {
+// Returns a read-only channel that receives configuration reload requests from the caller.
+// The channel will be closed when the runtime shuts down.
+func RunCfg(ctx context.Context, cfg *config.Config, provider providers.LLMProvider, debug bool) (*Controller, error) {
+	// 设置日志级别
 	if debug {
-		logger.SetLevel(logger.DEBUG)
+		logger.SetLevel(logger.INFO)
 	} else {
 		logger.SetLevelFromString("fatal")
 	}
 
+	// 创建运行时上下文
+	runCtx, runCancel := context.WithCancel(ctx)
+
+	// 初始化组件
 	msgBus := bus.NewMessageBus()
 	agentLoop := agent.NewAgentLoop(cfg, msgBus, provider)
 
+	// 显示启动信息
 	fmt.Println("\n📦 Agent Status:")
 	startupInfo := agentLoop.GetStartupInfo()
 	toolsInfo := startupInfo["tools"].(map[string]any)
@@ -826,33 +842,105 @@ func RunCfg(ctx context.Context, cfg *config.Config, provider providers.LLMProvi
 	fmt.Printf("  • Tools: %d loaded\n", toolsInfo["count"])
 	fmt.Printf("  • Skills: %d/%d available\n", skillsInfo["available"], skillsInfo["total"])
 
-	runningServices, err := setupAndStartServices(ctx, cfg, agentLoop, msgBus, "", netbind.OpenResult{})
+	// 启动服务
+	runningServices, err := setupAndStartServices(runCtx, cfg, agentLoop, msgBus, "", netbind.OpenResult{})
 	if err != nil {
-		return err
+		runCancel()
+		return nil, fmt.Errorf("failed to setup services: %w", err)
 	}
 
-	defer func() {
+	// 创建通道
+	reloadChan := make(chan *config.Config, 1) // 缓冲为1，避免阻塞
+	errChan := make(chan error, 1)
+
+	// 启动配置重载处理
+	go handleConfigReloads(runCtx, reloadChan, runningServices, agentLoop, msgBus, provider)
+
+	// 启动 agent loop
+	go func() {
+		defer func() {
+			runCancel()
+			close(reloadChan)
+			close(errChan)
+		}()
+		if err := agentLoop.Run(runCtx); err != nil {
+			logger.Errorf("Agent loop error: %v", err)
+			errChan <- err
+		}
 		shutdownGateway(runningServices, agentLoop, provider, true)
 	}()
 
-	// Setup manual reload channel for /reload endpoint
-	manualReloadChan := make(chan struct{}, 1)
-	runningServices.manualReloadChan = manualReloadChan
-	reloadTrigger := func() error {
-		if !runningServices.reloading.CompareAndSwap(false, true) {
-			return fmt.Errorf("reload already in progress")
-		}
+	return &Controller{
+		Reload: reloadChan,
+		Stop:   runCancel,
+		Done:   runCtx.Done(),
+		Err:    errChan,
+	}, nil
+}
+
+// handleConfigReloads 处理配置重载请求
+func handleConfigReloads(ctx context.Context, reloadChan <-chan *config.Config,
+	runningServices *services, agentLoop *agent.AgentLoop,
+	msgBus *bus.MessageBus, provider providers.LLMProvider) {
+
+	for {
 		select {
-		case manualReloadChan <- struct{}{}:
-			return nil
-		default:
-			// Should not happen, but reset flag if channel is full
+		case <-ctx.Done():
+			logger.Info("Config reload handler stopped")
+			return
+
+		case newCfg, ok := <-reloadChan:
+			if !ok {
+				logger.Info("Config reload channel closed")
+				return
+			}
+
+			// 检查是否有重载在进行中
+			if !runningServices.reloading.CompareAndSwap(false, true) {
+				logger.Warn("Config reload skipped: another reload is in progress")
+				continue
+			}
+
+			// 执行重载
+			logger.Info("Received configuration reload request")
+			reloadCtx, reloadCancel := context.WithTimeout(ctx, providerReloadTimeout)
+			err := executeReloadCfg(reloadCtx, runningServices, agentLoop, msgBus, provider, newCfg)
+			reloadCancel()
+
+			if err != nil {
+				logger.Errorf("Config reload failed: %v", err)
+			} else {
+				logger.Info("Config reload completed successfully")
+			}
+
 			runningServices.reloading.Store(false)
-			return fmt.Errorf("reload already queued")
 		}
 	}
+}
 
-	agentLoop.SetReloadFunc(reloadTrigger)
+// executeReload 执行具体的重载逻辑
+func executeReloadCfg(ctx context.Context, runningServices *services,
+	agentLoop *agent.AgentLoop, msgBus *bus.MessageBus,
+	provider providers.LLMProvider, newCfg *config.Config) error {
 
-	return agentLoop.Run(ctx)
+	// 停止现有服务
+	stopAndCleanupServices(runningServices, serviceShutdownTimeout, true)
+
+	// 重载 provider 和配置
+	if err := agentLoop.ReloadProviderAndConfig(ctx, provider, newCfg); err != nil {
+		logger.Warn("Attempting to restart services with old provider and config...")
+		if restartErr := restartServices(ctx, agentLoop, runningServices, msgBus); restartErr != nil {
+			logger.Errorf("Failed to restart services: %v", restartErr)
+		}
+		return fmt.Errorf("error reloading agent loop: %w", err)
+	}
+
+	// 重启服务
+	logger.Info("Restarting all services with new configuration...")
+	if err := restartServices(ctx, agentLoop, runningServices, msgBus); err != nil {
+		logger.Errorf("Error restarting services: %v", err)
+		return fmt.Errorf("error restarting services: %w", err)
+	}
+
+	return nil
 }
