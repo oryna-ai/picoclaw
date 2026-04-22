@@ -9,7 +9,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/bwmarrin/snowflake"
 	"github.com/sipeed/picoclaw/pkg/bus"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
@@ -234,15 +233,13 @@ type turnState struct {
 	al *AgentLoop
 }
 
-var _node, _ = snowflake.NewNode(32)
-
 func newTurnState(agent *AgentInstance, opts processOptions, scope turnEventScope) *turnState {
 	ts := &turnState{
 		agent:       agent,
 		opts:        opts,
 		scope:       scope,
 		turnID:      scope.turnID,
-		stateID:     _node.Generate().String(),
+		stateID:     scope.stateID,
 		agentID:     agent.ID,
 		sessionKey:  opts.Dispatch.SessionKey,
 		turnCtx:     cloneTurnContext(scope.context),

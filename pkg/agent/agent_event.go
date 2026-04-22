@@ -5,8 +5,11 @@ package agent
 import (
 	"fmt"
 
+	"github.com/bwmarrin/snowflake"
 	"github.com/sipeed/picoclaw/pkg/logger"
 )
+
+var _node, _ = snowflake.NewNode(32)
 
 func (al *AgentLoop) newTurnEventScope(agentID, sessionKey string, turnCtx *TurnContext) turnEventScope {
 	seq := al.turnSeq.Add(1)
@@ -14,19 +17,7 @@ func (al *AgentLoop) newTurnEventScope(agentID, sessionKey string, turnCtx *Turn
 		agentID:    agentID,
 		sessionKey: sessionKey,
 		turnID:     fmt.Sprintf("%s-turn-%d", agentID, seq),
-		context:    cloneTurnContext(turnCtx),
-	}
-}
-
-// newTurnEventScopeWithStateID creates a turnEventScope with a pre-defined StateID
-// This is used when we want related turns to share the same StateID
-func (al *AgentLoop) newTurnEventScopeWithStateID(agentID, sessionKey, stateID string, turnCtx *TurnContext) turnEventScope {
-	seq := al.turnSeq.Add(1)
-	return turnEventScope{
-		agentID:    agentID,
-		sessionKey: sessionKey,
-		turnID:     fmt.Sprintf("%s-turn-%d", agentID, seq),
-		stateID:    stateID,
+		stateID:    _node.Generate().String(),
 		context:    cloneTurnContext(turnCtx),
 	}
 }
