@@ -810,10 +810,11 @@ func createHeartbeatHandler(ctx context.Context, agentLoop *agent.AgentLoop) fun
 
 // Controller 控制网关运行时的结构体
 type Controller struct {
-	Reload chan<- *config.Config // 配置重载通道（可写）
-	Stop   context.CancelFunc    // 停止运行时
-	Done   <-chan struct{}       // 运行时完成信号
-	Err    <-chan error          // 运行时错误
+	Reload   chan<- *config.Config // 配置重载通道（可写）
+	Stop     context.CancelFunc    // 停止运行时
+	Done     <-chan struct{}       // 运行时完成信号
+	Err      <-chan error          // 运行时错误
+	Services *services
 }
 
 // RunCfg starts the gateway runtime using the configuration loaded from configPath.
@@ -871,10 +872,11 @@ func RunCfg(ctx context.Context, cfg *config.Config, provider providers.LLMProvi
 	}()
 
 	return &Controller{
-		Reload: reloadChan,
-		Stop:   runCancel,
-		Done:   runCtx.Done(),
-		Err:    errChan,
+		Reload:   reloadChan,
+		Stop:     runCancel,
+		Done:     runCtx.Done(),
+		Err:      errChan,
+		Services: runningServices,
 	}, nil
 }
 
@@ -928,17 +930,12 @@ func executeReloadCfg(ctx context.Context, runningServices *services,
 
 	// 重载 provider 和配置
 	if err := agentLoop.ReloadProviderAndConfig(ctx, provider, newCfg); err != nil {
-		logger.Warn("Attempting to restart services with old provider and config...")
-		if restartErr := restartServices(ctx, agentLoop, runningServices, msgBus); restartErr != nil {
-			logger.Errorf("Failed to restart services: %v", restartErr)
-		}
 		return fmt.Errorf("error reloading agent loop: %w", err)
 	}
 
 	// 重启服务
 	logger.Info("Restarting all services with new configuration...")
 	if err := restartServices(ctx, agentLoop, runningServices, msgBus); err != nil {
-		logger.Errorf("Error restarting services: %v", err)
 		return fmt.Errorf("error restarting services: %w", err)
 	}
 
