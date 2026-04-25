@@ -90,6 +90,7 @@ func (p *Pipeline) CallLLM(
 			Meta:             ts.eventMeta("runTurn", "turn.llm.request"),
 			Context:          cloneTurnContext(ts.turnCtx),
 			Model:            exec.llmModel,
+			ModelName:        ts.agent.Model,
 			Messages:         exec.callMessages,
 			Tools:            exec.providerToolDefs,
 			Options:          exec.llmOpts,
@@ -105,10 +106,26 @@ func (p *Pipeline) CallLLM(
 			}
 		case HookActionAbortTurn:
 			exec.abortedByHook = true
+			al.emitEvent(
+				EventKindError,
+				ts.eventMeta("runTurn", "turn.error"),
+				ErrorPayload{
+					Stage:   "before_llm_hook",
+					Message: fmt.Sprintf("Hook %q aborted turn: %s", "before_llm", decision.Reason),
+				},
+			)
 			return ControlBreak, nil
 		case HookActionHardAbort:
 			_ = ts.requestHardAbort()
 			exec.abortedByHardAbort = true
+			al.emitEvent(
+				EventKindError,
+				ts.eventMeta("runTurn", "turn.error"),
+				ErrorPayload{
+					Stage:   "before_llm_hook",
+					Message: fmt.Sprintf("Hook %q hard-aborted turn: %s", "before_llm", decision.Reason),
+				},
+			)
 			return ControlBreak, nil
 		}
 	}
@@ -373,10 +390,26 @@ func (p *Pipeline) CallLLM(
 			}
 		case HookActionAbortTurn:
 			exec.abortedByHook = true
+			al.emitEvent(
+				EventKindError,
+				ts.eventMeta("runTurn", "turn.error"),
+				ErrorPayload{
+					Stage:   "after_llm_hook",
+					Message: fmt.Sprintf("Hook %q aborted turn: %s", "after_llm", decision.Reason),
+				},
+			)
 			return ControlBreak, nil
 		case HookActionHardAbort:
 			_ = ts.requestHardAbort()
 			exec.abortedByHardAbort = true
+			al.emitEvent(
+				EventKindError,
+				ts.eventMeta("runTurn", "turn.error"),
+				ErrorPayload{
+					Stage:   "after_llm_hook",
+					Message: fmt.Sprintf("Hook %q hard-aborted turn: %s", "after_llm", decision.Reason),
+				},
+			)
 			return ControlBreak, nil
 		}
 	}

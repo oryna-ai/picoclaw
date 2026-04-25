@@ -641,6 +641,18 @@ func runInterceptorHook[T any](
 	select {
 	case res := <-done:
 		if res.err != nil {
+			// If the hook returned a non-continue decision alongside an error,
+			// respect the decision (e.g., HardAbort for rate limiting).
+			if res.decision.normalizedAction() != HookActionContinue {
+				logger.WarnCF("hooks", "Interceptor hook returned error with explicit decision", map[string]any{
+					"hook":   name,
+					"stage":  stage,
+					"error":  res.err.Error(),
+					"action": res.decision.Action,
+					"reason": res.decision.Reason,
+				})
+				return res.value, res.decision, true
+			}
 			logger.WarnCF("hooks", "Interceptor hook failed", map[string]any{
 				"hook":  name,
 				"stage": stage,

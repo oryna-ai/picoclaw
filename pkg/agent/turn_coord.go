@@ -423,6 +423,7 @@ func (al *AgentLoop) askSideQuestion(
 			},
 			Context:          cloneTurnContext(turnCtx),
 			Model:            llmModel,
+			ModelName:        agent.Model,
 			Messages:         messages,
 			Tools:            nil,
 			Options:          llmOpts,
