@@ -212,7 +212,7 @@ func Run(debug bool, homePath, configPath string, allowEmptyStartup bool) (runEr
 			"skills_available": skillsInfo["available"],
 		})
 
-	runningServices, err := setupAndStartServices(context.TODO(), cfg, agentLoop, msgBus, pidData.Token, listenResult)
+	runningServices, err := setupAndStartServices(cfg, agentLoop, msgBus, pidData.Token, listenResult)
 	if err != nil {
 		return err
 	}
@@ -336,7 +336,6 @@ func createStartupProvider(
 }
 
 func setupAndStartServices(
-	ctx context.Context,
 	cfg *config.Config,
 	agentLoop *agent.AgentLoop,
 	msgBus *bus.MessageBus,
@@ -369,7 +368,7 @@ func setupAndStartServices(
 		cfg.Heartbeat.Enabled,
 	)
 	runningServices.HeartbeatService.SetBus(msgBus)
-	runningServices.HeartbeatService.SetHandler(createHeartbeatHandler(ctx, agentLoop))
+	runningServices.HeartbeatService.SetHandler(createHeartbeatHandler(agentLoop))
 	if err = runningServices.HeartbeatService.Start(); err != nil {
 		return nil, fmt.Errorf("error starting heartbeat service: %w", err)
 	}
@@ -410,22 +409,20 @@ func setupAndStartServices(
 		fmt.Println("⚠ Warning: No channels enabled")
 	}
 
-	if cfg.Gateway.Port > 0 {
-		runningServices.authToken = authToken
-		runningServices.HealthServer = health.NewServer(listenResult.ProbeHost, cfg.Gateway.Port, authToken)
+	runningServices.authToken = authToken
+	runningServices.HealthServer = health.NewServer(listenResult.ProbeHost, cfg.Gateway.Port, authToken)
 
-		var listenAddr string
-		if len(listenResult.Listeners) > 0 {
-			listenAddr = listenResult.Listeners[0].Addr().String()
-		} else {
-			listenAddr = net.JoinHostPort(listenResult.ProbeHost, strconv.Itoa(cfg.Gateway.Port))
-		}
-		runningServices.ChannelManager.SetupHTTPServerListeners(
-			listenResult.Listeners,
-			listenAddr,
-			runningServices.HealthServer,
-		)
+	var listenAddr string
+	if len(listenResult.Listeners) > 0 {
+		listenAddr = listenResult.Listeners[0].Addr().String()
+	} else {
+		listenAddr = net.JoinHostPort(listenResult.ProbeHost, strconv.Itoa(cfg.Gateway.Port))
 	}
+	runningServices.ChannelManager.SetupHTTPServerListeners(
+		listenResult.Listeners,
+		listenAddr,
+		runningServices.HealthServer,
+	)
 
 	if err = runningServices.ChannelManager.StartAll(context.Background()); err != nil {
 		return nil, fmt.Errorf("error starting channels: %w", err)
@@ -441,13 +438,11 @@ func setupAndStartServices(
 		voiceAgent.Start(vaCtx)
 	}
 
-	if cfg.Gateway.Port > 0 {
-		healthAddr := net.JoinHostPort(listenResult.ProbeHost, strconv.Itoa(cfg.Gateway.Port))
-		fmt.Printf(
-			"✓ Health endpoints available at http://%s/health, /ready and /reload (POST)\n",
-			healthAddr,
-		)
-	}
+	healthAddr := net.JoinHostPort(listenResult.ProbeHost, strconv.Itoa(cfg.Gateway.Port))
+	fmt.Printf(
+		"✓ Health endpoints available at http://%s/health, /ready and /reload (POST)\n",
+		healthAddr,
+	)
 
 	stateManager := state.NewManager(cfg.WorkspacePath())
 	runningServices.DeviceService = devices.NewService(devices.Config{
@@ -497,10 +492,8 @@ func shutdownGateway(
 	provider providers.LLMProvider,
 	fullShutdown bool,
 ) {
-	if provider != nil {
-		if cp, ok := provider.(providers.StatefulProvider); ok && fullShutdown {
-			cp.Close()
-		}
+	if cp, ok := provider.(providers.StatefulProvider); ok && fullShutdown {
+		cp.Close()
 	}
 
 	stopAndCleanupServices(runningServices, gracefulShutdownTimeout, false)
@@ -534,7 +527,7 @@ func handleConfigReload(
 	if err != nil {
 		logger.Errorf("  ⚠ Error creating new provider: %v", err)
 		logger.Warn("  Attempting to restart services with old provider and config...")
-		if restartErr := restartServices(ctx, al, runningServices, msgBus); restartErr != nil {
+		if restartErr := restartServices(al, runningServices, msgBus); restartErr != nil {
 			logger.Errorf("  ⚠ Failed to restart services: %v", restartErr)
 		}
 		return fmt.Errorf("error creating new provider: %w", err)
@@ -544,7 +537,7 @@ func handleConfigReload(
 		newCfg.Agents.Defaults.ModelName = newModelID
 	}
 
-	reloadCtx, reloadCancel := context.WithTimeout(ctx, providerReloadTimeout)
+	reloadCtx, reloadCancel := context.WithTimeout(context.Background(), providerReloadTimeout)
 	defer reloadCancel()
 
 	if err := al.ReloadProviderAndConfig(reloadCtx, newProvider, newCfg); err != nil {
@@ -553,7 +546,7 @@ func handleConfigReload(
 			cp.Close()
 		}
 		logger.Warn("  Attempting to restart services with old provider and config...")
-		if restartErr := restartServices(reloadCtx, al, runningServices, msgBus); restartErr != nil {
+		if restartErr := restartServices(al, runningServices, msgBus); restartErr != nil {
 			logger.Errorf("  ⚠ Failed to restart services: %v", restartErr)
 		}
 		return fmt.Errorf("error reloading agent loop: %w", err)
@@ -562,7 +555,7 @@ func handleConfigReload(
 	*providerRef = newProvider
 
 	logger.Info("  Restarting all services with new configuration...")
-	if err := restartServices(reloadCtx, al, runningServices, msgBus); err != nil {
+	if err := restartServices(al, runningServices, msgBus); err != nil {
 		logger.Errorf("  ⚠ Error restarting services: %v", err)
 		return fmt.Errorf("error restarting services: %w", err)
 	}
@@ -581,7 +574,6 @@ func handleConfigReload(
 }
 
 func restartServices(
-	ctx context.Context,
 	al *agent.AgentLoop,
 	runningServices *services,
 	msgBus *bus.MessageBus,
@@ -612,7 +604,7 @@ func restartServices(
 		cfg.Heartbeat.Enabled,
 	)
 	runningServices.HeartbeatService.SetBus(msgBus)
-	runningServices.HeartbeatService.SetHandler(createHeartbeatHandler(ctx, al))
+	runningServices.HeartbeatService.SetHandler(createHeartbeatHandler(al))
 	if err = runningServices.HeartbeatService.Start(); err != nil {
 		return fmt.Errorf("error restarting heartbeat service: %w", err)
 	}
@@ -791,13 +783,13 @@ func setupCronTool(
 	return cronService, nil
 }
 
-func createHeartbeatHandler(ctx context.Context, agentLoop *agent.AgentLoop) func(prompt, channel, chatID string) *tools.ToolResult {
+func createHeartbeatHandler(agentLoop *agent.AgentLoop) func(prompt, channel, chatID string) *tools.ToolResult {
 	return func(prompt, channel, chatID string) *tools.ToolResult {
 		if channel == "" || chatID == "" {
 			channel, chatID = "cli", "direct"
 		}
 
-		response, err := agentLoop.ProcessHeartbeat(ctx, prompt, channel, chatID)
+		response, err := agentLoop.ProcessHeartbeat(context.Background(), prompt, channel, chatID)
 		if err != nil {
 			return tools.ErrorResult(fmt.Sprintf("Heartbeat error: %v", err))
 		}
@@ -806,138 +798,4 @@ func createHeartbeatHandler(ctx context.Context, agentLoop *agent.AgentLoop) fun
 		}
 		return tools.SilentResult(response)
 	}
-}
-
-// Controller 控制网关运行时的结构体
-type Controller struct {
-	Reload   chan<- *config.Config // 配置重载通道（可写）
-	Stop     context.CancelFunc    // 停止运行时
-	Done     <-chan struct{}       // 运行时完成信号
-	Err      <-chan error          // 运行时错误
-	Services *services
-}
-
-// RunCfg starts the gateway runtime using the configuration loaded from configPath.
-// Returns a read-only channel that receives configuration reload requests from the caller.
-// The channel will be closed when the runtime shuts down.
-func RunCfg(ctx context.Context, cfg *config.Config, provider providers.LLMProvider, debug bool) (*Controller, error) {
-	// 设置日志级别
-	if debug {
-		logger.SetLevel(logger.INFO)
-	} else {
-		logger.SetLevelFromString("fatal")
-	}
-
-	// 创建运行时上下文
-	runCtx, runCancel := context.WithCancel(ctx)
-
-	// 初始化组件
-	msgBus := bus.NewMessageBus()
-	agentLoop := agent.NewAgentLoop(cfg, msgBus, provider)
-
-	// 显示启动信息
-	fmt.Println("\n📦 Agent Status:")
-	startupInfo := agentLoop.GetStartupInfo()
-	toolsInfo := startupInfo["tools"].(map[string]any)
-	skillsInfo := startupInfo["skills"].(map[string]any)
-	fmt.Printf("  • Tools: %d loaded\n", toolsInfo["count"])
-	fmt.Printf("  • Skills: %d/%d available\n", skillsInfo["available"], skillsInfo["total"])
-
-	// 启动服务
-	runningServices, err := setupAndStartServices(runCtx, cfg, agentLoop, msgBus, "", netbind.OpenResult{})
-	if err != nil {
-		runCancel()
-		return nil, fmt.Errorf("failed to setup services: %w", err)
-	}
-
-	// 创建通道
-	reloadChan := make(chan *config.Config, 1) // 缓冲为1，避免阻塞
-	errChan := make(chan error, 1)
-
-	// 启动配置重载处理
-	go handleConfigReloads(runCtx, reloadChan, runningServices, agentLoop, msgBus, provider)
-
-	// 启动 agent loop
-	go func() {
-		defer func() {
-			runCancel()
-			close(reloadChan)
-			close(errChan)
-		}()
-		if err := agentLoop.Run(runCtx); err != nil {
-			logger.Errorf("Agent loop error: %v", err)
-			errChan <- err
-		}
-		shutdownGateway(runningServices, agentLoop, provider, true)
-	}()
-
-	return &Controller{
-		Reload:   reloadChan,
-		Stop:     runCancel,
-		Done:     runCtx.Done(),
-		Err:      errChan,
-		Services: runningServices,
-	}, nil
-}
-
-// handleConfigReloads 处理配置重载请求
-func handleConfigReloads(ctx context.Context, reloadChan <-chan *config.Config,
-	runningServices *services, agentLoop *agent.AgentLoop,
-	msgBus *bus.MessageBus, provider providers.LLMProvider) {
-
-	for {
-		select {
-		case <-ctx.Done():
-			logger.Info("Config reload handler stopped")
-			return
-
-		case newCfg, ok := <-reloadChan:
-			if !ok {
-				logger.Info("Config reload channel closed")
-				return
-			}
-
-			// 检查是否有重载在进行中
-			if !runningServices.reloading.CompareAndSwap(false, true) {
-				logger.Warn("Config reload skipped: another reload is in progress")
-				continue
-			}
-
-			// 执行重载
-			logger.Info("Received configuration reload request")
-			reloadCtx, reloadCancel := context.WithTimeout(ctx, providerReloadTimeout)
-			err := executeReloadCfg(reloadCtx, runningServices, agentLoop, msgBus, provider, newCfg)
-			reloadCancel()
-
-			if err != nil {
-				logger.Errorf("Config reload failed: %v", err)
-			} else {
-				logger.Info("Config reload completed successfully")
-			}
-
-			runningServices.reloading.Store(false)
-		}
-	}
-}
-
-// executeReload 执行具体的重载逻辑
-func executeReloadCfg(ctx context.Context, runningServices *services,
-	agentLoop *agent.AgentLoop, msgBus *bus.MessageBus,
-	provider providers.LLMProvider, newCfg *config.Config) error {
-
-	// 停止现有服务
-	stopAndCleanupServices(runningServices, serviceShutdownTimeout, true)
-
-	// 重载 provider 和配置
-	if err := agentLoop.ReloadProviderAndConfig(ctx, provider, newCfg); err != nil {
-		return fmt.Errorf("error reloading agent loop: %w", err)
-	}
-
-	// 重启服务
-	logger.Info("Restarting all services with new configuration...")
-	if err := restartServices(ctx, agentLoop, runningServices, msgBus); err != nil {
-		return fmt.Errorf("error restarting services: %w", err)
-	}
-
-	return nil
 }
