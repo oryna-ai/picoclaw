@@ -52,9 +52,7 @@ func init() {
 			if err != nil {
 				return nil, err
 			}
-			if channelName != config.ChannelWeixin {
-				ch.SetName(channelName)
-			}
+			ch.SetName(channelName)
 			return ch, nil
 		},
 	)

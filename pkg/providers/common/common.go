@@ -72,7 +72,7 @@ func NewHTTPClient(proxy string) *http.Client {
 type openaiMessage struct {
 	Role             string           `json:"role"`
 	Content          string           `json:"content"`
-	ReasoningContent string           `json:"reasoning_content"`
+	ReasoningContent string           `json:"reasoning_content,omitempty"`
 	ToolCalls        []openaiToolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string           `json:"tool_call_id,omitempty"`
 }

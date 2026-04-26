@@ -117,7 +117,7 @@ func NewChannel(bc *config.Channel, cfg *config.WeComSettings, messageBus *bus.M
 	}
 
 	base := channels.NewBaseChannel(
-		"wecom",
+		bc.Name(),
 		cfg,
 		messageBus,
 		bc.AllowFrom,
@@ -137,7 +137,7 @@ func NewChannel(bc *config.Channel, cfg *config.WeComSettings, messageBus *bus.M
 	return ch, nil
 }
 
-func (c *WeComChannel) Name() string { return "wecom" }
+// func (c *WeComChannel) Name() string { return "wecom" }
 
 func (c *WeComChannel) Start(ctx context.Context) error {
 	logger.InfoC("wecom", "Starting WeCom channel...")
@@ -571,7 +571,7 @@ func (c *WeComChannel) dispatchIncoming(reqID string, msg wecomIncomingMessage) 
 	}
 
 	metadata := map[string]string{
-		"channel":   "wecom",
+		"channel":   c.Name(),
 		"req_id":    reqID,
 		"chat_id":   actualChatID,
 		"chat_type": msg.ChatType,

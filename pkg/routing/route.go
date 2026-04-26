@@ -273,7 +273,9 @@ func buildDispatchView(inbound bus.InboundContext, identityLinks map[string][]st
 
 func normalizeDispatchSelector(selector config.DispatchSelector) config.DispatchSelector {
 	selector.Channel = strings.ToLower(strings.TrimSpace(selector.Channel))
-	selector.Account = NormalizeAccountID(selector.Account)
+	if strings.TrimSpace(selector.Account) != "" {
+		selector.Account = NormalizeAccountID(selector.Account)
+	}
 	selector.Space = strings.ToLower(strings.TrimSpace(selector.Space))
 	selector.Chat = strings.ToLower(strings.TrimSpace(selector.Chat))
 	selector.Topic = strings.ToLower(strings.TrimSpace(selector.Topic))
