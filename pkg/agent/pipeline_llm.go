@@ -39,10 +39,10 @@ func (p *Pipeline) CallLLM(
 	exec.providerToolDefs = ts.agent.Tools.ToProviderDefs()
 
 	// Native web search support
-	_, hasWebSearch := ts.agent.Tools.Get("web_search")
-	exec.useNativeSearch = al.cfg.Tools.Web.PreferNative && hasWebSearch &&
+	webSearchEnabled := al.cfg.Tools.IsToolEnabled("web")
+	exec.useNativeSearch = webSearchEnabled && al.cfg.Tools.Web.PreferNative &&
 		func() bool {
-			if ns, ok := ts.agent.Provider.(interface{ SupportsNativeSearch() bool }); ok {
+			if ns, ok := ts.agent.Provider.(providers.NativeSearchCapable); ok {
 				return ns.SupportsNativeSearch()
 			}
 			return false
@@ -340,10 +340,8 @@ func (p *Pipeline) CallLLM(
 				exec.history = asmResp.History
 				exec.summary = asmResp.Summary
 			}
-			exec.messages = ts.agent.ContextBuilder.BuildMessages(
-				exec.history, exec.summary, "",
-				nil, ts.channel, ts.chatID, ts.opts.Dispatch.SenderID(), ts.opts.SenderDisplayName,
-				activeSkillNames(ts.agent, ts.opts)...,
+			exec.messages = ts.agent.ContextBuilder.BuildMessagesFromPrompt(
+				promptBuildRequestForTurn(ts, exec.history, exec.summary, "", nil),
 			)
 			exec.callMessages = exec.messages
 			if exec.gracefulTerminal {
@@ -422,10 +420,7 @@ func (p *Pipeline) CallLLM(
 		}
 	}
 
-	reasoningContent := exec.response.Reasoning
-	if reasoningContent == "" {
-		reasoningContent = exec.response.ReasoningContent
-	}
+	reasoningContent := responseReasoningContent(exec.response)
 	if ts.channel == "pico" {
 		go al.publishPicoReasoning(turnCtx, reasoningContent, ts.chatID)
 	} else {
@@ -462,7 +457,11 @@ func (p *Pipeline) CallLLM(
 	}
 	logger.DebugCF("agent", "LLM response", llmResponseFields)
 
-	if al.bus != nil && ts.channel == "pico" && len(exec.response.ToolCalls) > 0 && ts.opts.AllowInterimPicoPublish {
+	if al.bus != nil &&
+		ts.channel == "pico" &&
+		len(exec.response.ToolCalls) > 0 &&
+		ts.opts.AllowInterimPicoPublish &&
+		!shouldPublishToolFeedback(al.cfg, ts) {
 		if strings.TrimSpace(exec.response.Content) != "" {
 			outCtx, outCancel := context.WithTimeout(turnCtx, 3*time.Second)
 			publishErr := al.bus.PublishOutbound(outCtx, bus.OutboundMessage{
@@ -530,11 +529,23 @@ func (p *Pipeline) CallLLM(
 	assistantMsg := providers.Message{
 		Role:             "assistant",
 		Content:          exec.response.Content,
-		ReasoningContent: exec.response.ReasoningContent,
+		ReasoningContent: reasoningContent,
 	}
 	for _, tc := range exec.normalizedToolCalls {
 		argumentsJSON, _ := json.Marshal(tc.Arguments)
+		toolFeedbackExplanation := toolFeedbackExplanationForToolCall(
+			exec.response,
+			tc,
+			exec.messages,
+			al.cfg.Agents.Defaults.GetToolFeedbackMaxArgsLength(),
+		)
 		extraContent := tc.ExtraContent
+		if strings.TrimSpace(toolFeedbackExplanation) != "" {
+			if extraContent == nil {
+				extraContent = &providers.ExtraContent{}
+			}
+			extraContent.ToolFeedbackExplanation = toolFeedbackExplanation
+		}
 		thoughtSignature := ""
 		if tc.Function != nil {
 			thoughtSignature = tc.Function.ThoughtSignature
