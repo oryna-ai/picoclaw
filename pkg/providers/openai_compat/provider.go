@@ -257,10 +257,6 @@ func filterDeepSeekReasoningMessages(messages []Message) []Message {
 func filterDeepSeekReasoningTurn(messages []Message) []Message {
 	out := make([]Message, 0, len(messages))
 	for _, msg := range messages {
-		if messageutil.IsTransientAssistantThoughtMessage(msg) {
-			continue
-		}
-
 		cloned := msg
 		if assistantMessageEmpty(cloned) {
 			continue

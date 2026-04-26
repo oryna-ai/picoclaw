@@ -19,6 +19,18 @@ func (al *AgentLoop) RegisterTool(tool tools.Tool) {
 	}
 }
 
+// ResetTools clears all registered tools for every agent.
+// This is useful for reload scenarios where tools need to be re-registered
+// from scratch (e.g., after a configuration change).
+func (al *AgentLoop) ResetTools() {
+	registry := al.GetRegistry()
+	for _, agentID := range registry.ListAgentIDs() {
+		if agent, ok := registry.GetAgent(agentID); ok {
+			agent.Tools.Reset()
+		}
+	}
+}
+
 func (al *AgentLoop) SetChannelManager(cm *channels.Manager) {
 	al.channelManager = cm
 }

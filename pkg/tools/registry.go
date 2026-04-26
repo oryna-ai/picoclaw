@@ -404,6 +404,16 @@ func (r *ToolRegistry) List() []string {
 // tools registered on the parent after cloning (e.g. spawn, spawn_status)
 // will NOT be visible to the clone, preventing recursive subagent spawning.
 // The version counter is reset to 0 in the clone as it's a new independent registry.
+// Reset clears all registered tools from the registry.
+// This is useful for reload scenarios where tools need to be re-registered.
+func (r *ToolRegistry) Reset() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.tools = make(map[string]*ToolEntry)
+	r.version.Add(1)
+	logger.DebugCF("tools", "Tool registry reset", nil)
+}
+
 func (r *ToolRegistry) Clone() *ToolRegistry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

@@ -244,15 +244,15 @@ func TestProviderChat_StripsReasoningContentForNonDeepSeekHistory(t *testing.T) 
 	if !ok {
 		t.Fatalf("assistant message is not map[string]any: %T", reqMessages[1])
 	}
-	if _, exists := assistantMsg["reasoning_content"]; exists {
+	if v, exists := assistantMsg["reasoning_content"]; exists && v != "" {
 		t.Fatalf(
-			"reasoning_content should be stripped for non-DeepSeek providers, got %v",
+			"reasoning_content should be empty for non-DeepSeek providers, got %v",
 			assistantMsg["reasoning_content"],
 		)
 	}
 }
 
-func TestProviderChat_DeepSeekOmitsReasoningContentForNonToolTurnHistory(t *testing.T) {
+func TestProviderChat_DeepSeekPreservesReasoningContentForNonToolTurnHistory(t *testing.T) {
 	var requestBody map[string]any
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -301,9 +301,9 @@ func TestProviderChat_DeepSeekOmitsReasoningContentForNonToolTurnHistory(t *test
 	if !ok {
 		t.Fatalf("assistant message is not map[string]any: %T", reqMessages[1])
 	}
-	if _, exists := assistantMsg["reasoning_content"]; exists {
+	if assistantMsg["reasoning_content"] != "Let me think... 1+1=2" {
 		t.Fatalf(
-			"reasoning_content should be omitted for DeepSeek non-tool turns, got %v",
+			"reasoning_content should be preserved for DeepSeek non-tool turns, got %v",
 			assistantMsg["reasoning_content"],
 		)
 	}
@@ -492,17 +492,19 @@ func TestProviderChat_HistoryCanonicalizationMatrix(t *testing.T) {
 			t.Fatalf("len(messages) = %d, want %d", len(msgs), len(baseMessages))
 		}
 
-		if _, ok := msgs[1]["reasoning_content"]; ok {
+		// DeepSeek thinking mode requires reasoning_content to be preserved
+		// for all assistant messages, including non-tool turns.
+		if msgs[1]["reasoning_content"] != "plain thought" {
 			t.Fatalf(
-				"turn1 reasoning_content should be stripped for DeepSeek non-tool turn, got %v",
+				"turn1 reasoning_content should be preserved for DeepSeek, got %v",
 				msgs[1]["reasoning_content"],
 			)
 		}
 		if msgs[3]["reasoning_content"] != "tool thought" {
 			t.Fatalf("turn2 reasoning_content = %v, want preserved", msgs[3]["reasoning_content"])
 		}
-		if _, ok := msgs[6]["reasoning_content"]; ok {
-			t.Fatalf("turn3 reasoning_content should be absent, got %v", msgs[6]["reasoning_content"])
+		if v, ok := msgs[6]["reasoning_content"]; ok && v != "" {
+			t.Fatalf("turn3 reasoning_content should be empty, got %v", msgs[6]["reasoning_content"])
 		}
 		if msgs[9]["reasoning_content"] != "tool mixed thought" {
 			t.Fatalf("turn4 reasoning_content = %v, want preserved", msgs[9]["reasoning_content"])
@@ -515,9 +517,9 @@ func TestProviderChat_HistoryCanonicalizationMatrix(t *testing.T) {
 	t.Run("non-deepseek", func(t *testing.T) {
 		msgs := captureRequestMessages(t, "")
 		for i, msg := range msgs {
-			if _, ok := msg["reasoning_content"]; ok {
+			if v, ok := msg["reasoning_content"]; ok && v != "" {
 				t.Fatalf(
-					"messages[%d] reasoning_content should be stripped for non-DeepSeek providers, got %v",
+					"messages[%d] reasoning_content should be empty for non-DeepSeek providers, got %v",
 					i,
 					msg["reasoning_content"],
 				)
