@@ -232,7 +232,7 @@ func (c *DingTalkChannel) onChatBotMessageReceived(
 	}
 
 	inboundCtx := bus.InboundContext{
-		Channel:   "dingtalk",
+		Channel:   c.Name(),
 		ChatID:    chatID,
 		ChatType:  chatType,
 		SenderID:  resolvedSenderID,

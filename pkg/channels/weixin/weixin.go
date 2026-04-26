@@ -376,7 +376,7 @@ func (c *WeixinChannel) handleInboundMessage(ctx context.Context, msg WeixinMess
 	}
 
 	inboundCtx := bus.InboundContext{
-		Channel:   "weixin",
+		Channel:   c.Name(),
 		ChatID:    fromUserID,
 		ChatType:  "direct",
 		SenderID:  fromUserID,

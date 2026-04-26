@@ -665,7 +665,7 @@ func (c *FeishuChannel) handleMessageReceive(ctx context.Context, event *larkim.
 	})
 
 	inboundCtx := bus.InboundContext{
-		Channel:   "feishu",
+		Channel:   c.Name(),
 		ChatID:    chatID,
 		ChatType:  inboundChatType,
 		SenderID:  senderID,
