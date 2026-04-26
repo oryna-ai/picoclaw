@@ -255,14 +255,6 @@ func filterDeepSeekReasoningMessages(messages []Message) []Message {
 }
 
 func filterDeepSeekReasoningTurn(messages []Message) []Message {
-	hasToolInteraction := false
-	for _, msg := range messages {
-		if msg.Role == "tool" || (msg.Role == "assistant" && len(msg.ToolCalls) > 0) {
-			hasToolInteraction = true
-			break
-		}
-	}
-
 	out := make([]Message, 0, len(messages))
 	for _, msg := range messages {
 		if messageutil.IsTransientAssistantThoughtMessage(msg) {
@@ -270,9 +262,6 @@ func filterDeepSeekReasoningTurn(messages []Message) []Message {
 		}
 
 		cloned := msg
-		if cloned.Role == "assistant" && strings.TrimSpace(cloned.ReasoningContent) != "" && !hasToolInteraction {
-			cloned.ReasoningContent = ""
-		}
 		if assistantMessageEmpty(cloned) {
 			continue
 		}

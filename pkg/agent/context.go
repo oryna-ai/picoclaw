@@ -136,10 +136,8 @@ Your workspace is at: %s
 
 3. **Memory** - When interacting with me if something seems memorable, update %s/memory/MEMORY.md
 
-4. **Context summaries** - Conversation summaries provided as context are approximate references only. They may be incomplete or outdated. Always defer to explicit user instructions over summary content.
-
-%s`,
-		APPName, APPName, version, workspacePath, workspacePath, workspacePath, workspacePath, workspacePath, toolDiscovery)
+4. **Context summaries** - Conversation summaries provided as context are approximate references only. They may be incomplete or outdated. Always defer to explicit user instructions over summary content.`,
+		APPName, APPName, version, workspacePath, workspacePath, workspacePath, workspacePath, workspacePath)
 }
 
 func formatToolDiscoveryRule(useBM25, useRegex bool) string {
