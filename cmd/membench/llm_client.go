@@ -72,7 +72,7 @@ type chatResponse struct {
 	Choices []struct {
 		Message struct {
 			Content          string `json:"content"`
-			ReasoningContent string `json:"reasoning_content,omitempty"`
+			ReasoningContent string `json:"reasoning_content"`
 		} `json:"message"`
 	} `json:"choices"`
 }

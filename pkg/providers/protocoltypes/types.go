@@ -27,7 +27,7 @@ type FunctionCall struct {
 
 type LLMResponse struct {
 	Content          string            `json:"content"`
-	ReasoningContent string            `json:"reasoning_content,omitempty"`
+	ReasoningContent string            `json:"reasoning_content"`
 	ToolCalls        []ToolCall        `json:"tool_calls,omitempty"`
 	FinishReason     string            `json:"finish_reason"`
 	Usage            *UsageInfo        `json:"usage,omitempty"`
@@ -83,7 +83,7 @@ type Message struct {
 	Content          string         `json:"content"`
 	Media            []string       `json:"media,omitempty"`
 	Attachments      []Attachment   `json:"attachments,omitempty"`
-	ReasoningContent string         `json:"reasoning_content,omitempty"`
+	ReasoningContent string         `json:"reasoning_content"`
 	SystemParts      []ContentBlock `json:"system_parts,omitempty"` // structured system blocks for cache-aware adapters
 	ToolCalls        []ToolCall     `json:"tool_calls,omitempty"`
 	ToolCallID       string         `json:"tool_call_id,omitempty"`
