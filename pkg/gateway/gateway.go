@@ -610,13 +610,18 @@ func restartServices(
 	}
 	fmt.Println("  ✓ Heartbeat service restarted")
 
-	runningServices.MediaStore = media.NewFileMediaStoreWithCleanup(media.MediaCleanerConfig{
-		Enabled:  cfg.Tools.MediaCleanup.Enabled,
-		MaxAge:   time.Duration(cfg.Tools.MediaCleanup.MaxAge) * time.Minute,
-		Interval: time.Duration(cfg.Tools.MediaCleanup.Interval) * time.Minute,
-	})
-	if fms, ok := runningServices.MediaStore.(*media.FileMediaStore); ok {
-		fms.Start()
+	// Reuse existing media store on reload to preserve previously stored media refs.
+	// Creating a new store would discard all existing refs, causing "unknown ref" errors
+	// when the agent tries to resolve media:// refs from messages received before the reload.
+	if runningServices.MediaStore == nil {
+		runningServices.MediaStore = media.NewFileMediaStoreWithCleanup(media.MediaCleanerConfig{
+			Enabled:  cfg.Tools.MediaCleanup.Enabled,
+			MaxAge:   time.Duration(cfg.Tools.MediaCleanup.MaxAge) * time.Minute,
+			Interval: time.Duration(cfg.Tools.MediaCleanup.Interval) * time.Minute,
+		})
+		if fms, ok := runningServices.MediaStore.(*media.FileMediaStore); ok {
+			fms.Start()
+		}
 	}
 	al.SetMediaStore(runningServices.MediaStore)
 

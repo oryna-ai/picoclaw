@@ -11,7 +11,20 @@ import (
 func toChannelHashes(cfg *config.Config) map[string]string {
 	result := make(map[string]string)
 	ch := cfg.Channels
-	// should not be error
+
+	// Pre-warm extend by calling GetDecoded on each enabled channel before
+	// serialization. This ensures Channel.MarshalJSON uses the decoded struct
+	// (where SecureString fields serialize as "__SECURED__") rather than the
+	// raw Settings node (where they contain actual values). Without this step,
+	// the hash computed during Reload would differ from the one computed at
+	// startup, causing every channel to appear as "config changed" and be
+	// unnecessarily stopped and restarted.
+	for _, bc := range ch {
+		if bc != nil && bc.Enabled {
+			_, _ = bc.GetDecoded()
+		}
+	}
+
 	marshal, _ := json.Marshal(ch)
 	var channelConfig map[string]map[string]any
 	_ = json.Unmarshal(marshal, &channelConfig)
