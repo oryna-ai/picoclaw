@@ -33,12 +33,13 @@ func (p *Pipeline) CallLLM(
 		exec.messages = resolveMediaRefs(exec.messages, p.MediaStore, maxMediaSize)
 	}
 
-	// PreLLM: if the current model does not support vision, replace image data
-	// URLs with local file path tags ([image:/path]) so the LLM can use tools
-	// (e.g. load_image, MCP tools) to process the image instead of sending raw
-	// base64 data that would hang or be rejected by a text-only model.
-	if hasMediaRefs(exec.messages) && p.Cfg.Agents.Defaults.ImageModel == "" {
-		logger.WarnCF("agent", "Media detected but no ImageModel configured; injecting image path tags for tool-based processing",
+	// PreLLM: replace image data URLs with local file path tags ([image:/path])
+	// so the LLM can use tools (e.g. load_image, MCP tools) to process the image
+	// instead of sending raw base64 data. This applies to all models — vision-capable
+	// models can use load_image to read the image, text-only models will tell the
+	// user they cannot process images.
+	if hasMediaRefs(exec.messages) {
+		logger.DebugCF("agent", "Media detected; injecting image path tags for tool-based processing",
 			map[string]any{
 				"agent_id": ts.agent.ID,
 				"model":    exec.activeModel,
