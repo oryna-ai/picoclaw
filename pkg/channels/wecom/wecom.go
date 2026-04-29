@@ -292,6 +292,7 @@ func (c *WeComChannel) SendMedia(ctx context.Context, msg bus.OutboundMediaMessa
 
 func (c *WeComChannel) connectLoop() {
 	backoff := time.Second
+	const maxBackoff = time.Minute
 	for {
 		select {
 		case <-c.ctx.Done():
@@ -304,20 +305,31 @@ func (c *WeComChannel) connectLoop() {
 				"error":   err.Error(),
 				"backoff": backoff.String(),
 			})
+			// Clean up pending requests on connection loss so they don't
+			// hang indefinitely waiting for acks that will never arrive.
+			c.pendingMu.Lock()
+			for reqID, ch := range c.pending {
+				close(ch)
+				delete(c.pending, reqID)
+			}
+			c.pendingMu.Unlock()
+
 			select {
 			case <-time.After(backoff):
 			case <-c.ctx.Done():
 				return
 			}
-			if backoff < time.Minute {
+			if backoff < maxBackoff {
 				backoff *= 2
-				if backoff > time.Minute {
-					backoff = time.Minute
+				if backoff > maxBackoff {
+					backoff = maxBackoff
 				}
 			}
 			continue
 		}
-		return
+		// Connection succeeded — reset backoff and continue looping so that
+		// we can reconnect if the connection drops again later.
+		backoff = time.Second
 	}
 }
 
@@ -501,6 +513,13 @@ func (c *WeComChannel) dispatchIncoming(reqID string, msg wecomIncomingMessage) 
 		err       error
 	)
 	scope := channels.BuildMediaScope("wecom", actualChatID, msg.MsgID)
+
+	// Use a timeout context for media downloads to prevent goroutine leaks
+	// when the remote server is unresponsive. c.ctx has no deadline, so a
+	// stuck HTTP download would block the goroutine indefinitely.
+	mediaCtx, mediaCancel := context.WithTimeout(c.ctx, 30*time.Second)
+	defer mediaCancel()
+
 	switch msg.MsgType {
 	case "text":
 		if msg.Text != nil {
@@ -512,24 +531,24 @@ func (c *WeComChannel) dispatchIncoming(reqID string, msg wecomIncomingMessage) 
 		}
 	case "image":
 		content = "[image]"
-		mediaRefs, err = c.collectSingleMedia(c.ctx, scope, msg.MsgID, &mediaPayload{
+		mediaRefs, err = c.collectSingleMedia(mediaCtx, scope, msg.MsgID, &mediaPayload{
 			url:    msg.Image.URL,
 			aesKey: msg.Image.AESKey,
 		}, "image", ".jpg")
 	case "file":
 		content = "[file]"
-		mediaRefs, err = c.collectSingleMedia(c.ctx, scope, msg.MsgID, &mediaPayload{
+		mediaRefs, err = c.collectSingleMedia(mediaCtx, scope, msg.MsgID, &mediaPayload{
 			url:    msg.File.URL,
 			aesKey: msg.File.AESKey,
 		}, "file", ".bin")
 	case "video":
 		content = "[video]"
-		mediaRefs, err = c.collectSingleMedia(c.ctx, scope, msg.MsgID, &mediaPayload{
+		mediaRefs, err = c.collectSingleMedia(mediaCtx, scope, msg.MsgID, &mediaPayload{
 			url:    msg.Video.URL,
 			aesKey: msg.Video.AESKey,
 		}, "video", ".mp4")
 	case "mixed":
-		content, mediaRefs, err = c.collectMixedMedia(c.ctx, scope, msg)
+		content, mediaRefs, err = c.collectMixedMedia(mediaCtx, scope, msg)
 	default:
 		return c.respondImmediate(reqID, "Unsupported WeCom message type: "+msg.MsgType)
 	}
@@ -595,7 +614,11 @@ func (c *WeComChannel) dispatchIncoming(reqID string, msg wecomIncomingMessage) 
 		Raw: metadata,
 	}
 
-	c.HandleInboundContext(c.ctx, actualChatID, content, mediaRefs, inboundCtx, sender)
+	// Use a separate timeout context for HandleInboundContext to prevent
+	// StartTyping HTTP calls from blocking indefinitely.
+	handleCtx, handleCancel := context.WithTimeout(c.ctx, 30*time.Second)
+	defer handleCancel()
+	c.HandleInboundContext(handleCtx, actualChatID, content, mediaRefs, inboundCtx, sender)
 	return nil
 }
 
@@ -814,7 +837,12 @@ func (c *WeComChannel) writeAndWaitAck(
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
-	case env := <-waitCh:
+	case env, ok := <-waitCh:
+		if !ok {
+			// Channel was closed (connection lost), return a temporary error
+			// so the caller can retry after reconnection.
+			return wecomEnvelope{}, fmt.Errorf("%w: connection lost while waiting for ack", channels.ErrTemporary)
+		}
 		if env.ErrCode != 0 {
 			return wecomEnvelope{}, fmt.Errorf(
 				"%w: wecom errcode=%d errmsg=%s",

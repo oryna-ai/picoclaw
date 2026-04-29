@@ -273,9 +273,11 @@ func (c *WeixinChannel) pollLoop(ctx context.Context) {
 			}
 		}
 
-		// Dispatch messages
+		// Dispatch messages asynchronously so that media downloads (image, video, file)
+		// do not block the poll loop. This mirrors the WeCom channel pattern where
+		// handleEnvelope is launched in a goroutine.
 		for _, msg := range resp.Msgs {
-			c.handleInboundMessage(ctx, msg)
+			go c.handleInboundMessage(ctx, msg)
 		}
 	}
 }
@@ -320,9 +322,15 @@ func (c *WeixinChannel) handleInboundMessage(ctx context.Context, msg WeixinMess
 		}
 	}
 
+	// Use a timeout context for media downloads to prevent goroutine leaks
+	// when the remote server is unresponsive. c.ctx has no deadline, so a
+	// stuck HTTP download would block the goroutine indefinitely.
+	mediaCtx, mediaCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer mediaCancel()
+
 	var mediaRefs []string
 	if mediaItem := selectInboundMediaItem(msg); mediaItem != nil {
-		ref, err := c.downloadMediaFromItem(ctx, fromUserID, messageID, mediaItem)
+		ref, err := c.downloadMediaFromItem(mediaCtx, fromUserID, messageID, mediaItem)
 		if err != nil {
 			logger.ErrorCF("weixin", "Failed to download inbound media", map[string]any{
 				"from_user_id": fromUserID,
@@ -387,7 +395,11 @@ func (c *WeixinChannel) handleInboundMessage(ctx context.Context, msg WeixinMess
 		}
 	}
 
-	c.HandleInboundContext(ctx, fromUserID, content, mediaRefs, inboundCtx, sender)
+	// Use a separate timeout context for HandleInboundContext to prevent
+	// StartTyping HTTP calls from blocking indefinitely.
+	handleCtx, handleCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer handleCancel()
+	c.HandleInboundContext(handleCtx, fromUserID, content, mediaRefs, inboundCtx, sender)
 }
 
 // Send implements channels.Channel by sending a text message to the WeChat user.

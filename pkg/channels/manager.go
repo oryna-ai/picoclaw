@@ -1350,10 +1350,49 @@ func (m *Manager) Reload(ctx context.Context, cfg *config.Config) error {
 				"error":   err.Error(),
 			})
 		}
-		deferFuncs = append(deferFuncs, func() {
-			m.UnregisterChannel(name)
-		})
+		// If the channel is also in the added list (config changed), we need to
+		// keep the worker alive and just replace it later. Only unregister if
+		// the channel is truly removed (not in added list).
+		isRemoved := true
+		for _, a := range added {
+			if a == name {
+				isRemoved = false
+				break
+			}
+		}
+		if isRemoved {
+			deferFuncs = append(deferFuncs, func() {
+				m.UnregisterChannel(name)
+			})
+		}
 	}
+	// For channels that are both removed and added (config changed),
+	// we need to unregister the old channel entry (but keep the new worker).
+	// The new worker was already created in the added loop above.
+	for _, name := range removed {
+		isAlsoAdded := false
+		for _, a := range added {
+			if a == name {
+				isAlsoAdded = true
+				break
+			}
+		}
+		if isAlsoAdded {
+			// Channel config changed: unregister old channel entry,
+			// but the new worker is already set up in the added loop.
+			// We need to capture the old channel for HTTP handler cleanup.
+			oldCh := m.channels[name]
+			deferFuncs = append(deferFuncs, func() {
+				m.mu.Lock()
+				if m.mux != nil {
+					m.unregisterChannelHTTPHandler(name, oldCh)
+				}
+				delete(m.channels, name)
+				m.mu.Unlock()
+			})
+		}
+	}
+
 	dispatchCtx, cancel := context.WithCancel(ctx)
 	m.dispatchTask = &asyncTask{cancel: cancel}
 	cc, err := toChannelConfig(cfg, added)
