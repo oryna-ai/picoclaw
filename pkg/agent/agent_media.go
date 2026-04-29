@@ -9,9 +9,11 @@ package agent
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/h2non/filetype"
 
@@ -33,6 +35,23 @@ func resolveMediaRefs(messages []providers.Message, store media.MediaStore, maxS
 	result := make([]providers.Message, len(messages))
 	copy(result, messages)
 
+	totalRefs := 0
+	for _, m := range messages {
+		for _, ref := range m.Media {
+			if strings.HasPrefix(ref, "media://") {
+				totalRefs++
+			}
+		}
+	}
+	if totalRefs > 0 {
+		logger.InfoCF("agent", "resolveMediaRefs: starting",
+			map[string]any{
+				"total_refs": totalRefs,
+				"messages":   len(messages),
+			})
+	}
+
+	resolvedCount := 0
 	for i, m := range result {
 		if len(m.Media) == 0 {
 			continue
@@ -68,9 +87,25 @@ func resolveMediaRefs(messages []providers.Message, store media.MediaStore, maxS
 			mime := detectMIME(localPath, meta)
 
 			if strings.HasPrefix(mime, "image/") {
+				resolvedCount++
+				logger.InfoCF("agent", "resolveMediaRefs: encoding image (%d/%d) size=%d path=%s",
+					map[string]any{
+						"index":    resolvedCount,
+						"total":    totalRefs,
+						"size":     info.Size(),
+						"path":     localPath,
+						"mime":     mime,
+						"max_size": maxSize,
+					})
 				dataURL := encodeImageToDataURL(localPath, mime, info, maxSize)
 				if dataURL != "" {
 					resolved = append(resolved, dataURL)
+					logger.InfoCF("agent", "resolveMediaRefs: encoded image (%d/%d) done len=%d",
+						map[string]any{
+							"index":       resolvedCount,
+							"total":       totalRefs,
+							"encoded_len": len(dataURL),
+						})
 				}
 				continue
 			}
@@ -82,6 +117,13 @@ func resolveMediaRefs(messages []providers.Message, store media.MediaStore, maxS
 		if len(pathTags) > 0 {
 			result[i].Content = injectPathTags(result[i].Content, pathTags)
 		}
+	}
+
+	if totalRefs > 0 {
+		logger.InfoCF("agent", "resolveMediaRefs: completed, resolved %d refs",
+			map[string]any{
+				"total_refs": totalRefs,
+			})
 	}
 
 	return result
@@ -165,6 +207,7 @@ func encodeImageToDataURL(localPath, mime string, info os.FileInfo, maxSize int)
 	buf.Grow(len(prefix) + encodedLen)
 	buf.WriteString(prefix)
 
+	encodeStart := time.Now()
 	encoder := base64.NewEncoder(base64.StdEncoding, &buf)
 	if _, err := io.Copy(encoder, f); err != nil {
 		logger.WarnCF("agent", "Failed to encode media file", map[string]any{
@@ -174,14 +217,25 @@ func encodeImageToDataURL(localPath, mime string, info os.FileInfo, maxSize int)
 		return ""
 	}
 	encoder.Close()
+	encodeElapsed := time.Since(encodeStart)
+
+	logger.DebugCF("agent", "encodeImageToDataURL: base64 encoding done",
+		map[string]any{
+			"path":        localPath,
+			"file_size":   info.Size(),
+			"encoded_len": buf.Len(),
+			"elapsed_ms":  encodeElapsed.Milliseconds(),
+		})
 
 	return buf.String()
 }
 
 // buildPathTag creates a structured tag exposing the local file path.
-// Tag type is derived from MIME: [audio:/path], [video:/path], or [file:/path].
+// Tag type is derived from MIME: [image:/path], [audio:/path], [video:/path], or [file:/path].
 func buildPathTag(mime, localPath string) string {
 	switch {
+	case strings.HasPrefix(mime, "image/"):
+		return "[image:" + localPath + "]"
 	case strings.HasPrefix(mime, "audio/"):
 		return "[audio:" + localPath + "]"
 	case strings.HasPrefix(mime, "video/"):
@@ -197,6 +251,8 @@ func injectPathTags(content string, tags []string) string {
 	for _, tag := range tags {
 		var generic string
 		switch {
+		case strings.HasPrefix(tag, "[image:"):
+			generic = "[image]"
 		case strings.HasPrefix(tag, "[audio:"):
 			generic = "[audio]"
 		case strings.HasPrefix(tag, "[video:"):
@@ -214,4 +270,83 @@ func injectPathTags(content string, tags []string) string {
 		}
 	}
 	return content
+}
+
+// injectImagePathTags replaces base64-encoded image data URLs in message Media
+// with local file path tags ([image:/path]) injected into Content. This is used
+// when the current model does not support vision — instead of sending raw image
+// data that would hang or be rejected, we expose the file path so the LLM can
+// use tools (e.g. load_image, MCP tools) to process the image.
+// Returns a new slice; original messages are not mutated.
+func injectImagePathTags(messages []providers.Message, store media.MediaStore) []providers.Message {
+	if store == nil {
+		return messages
+	}
+
+	result := make([]providers.Message, len(messages))
+	copy(result, messages)
+
+	for i, m := range result {
+		if len(m.Media) == 0 {
+			continue
+		}
+
+		var pathTags []string
+		var descriptions []string
+		resolved := make([]string, 0, len(m.Media))
+
+		for _, ref := range m.Media {
+			// Handle media:// refs: resolve to local path and inject path tag
+			if strings.HasPrefix(ref, "media://") {
+				localPath, meta, err := store.ResolveWithMeta(ref)
+				if err != nil {
+					logger.WarnCF("agent", "injectImagePathTags: failed to resolve media ref", map[string]any{
+						"ref":   ref,
+						"error": err.Error(),
+					})
+					continue
+				}
+
+				mime := detectMIME(localPath, meta)
+				if strings.HasPrefix(mime, "image/") {
+					pathTags = append(pathTags, buildPathTag(mime, localPath))
+					filename := meta.Filename
+					if filename == "" {
+						filename = localPath
+					}
+					descriptions = append(descriptions,
+						fmt.Sprintf("The user sent an image file: %s. You can use the load_image tool to load and analyze it, or use other MCP tools that support image processing. If no image processing tool is available, let the user know that you cannot process images.", filename))
+				} else {
+					// Non-image media: keep the ref as-is (audio/video/docs still need the ref)
+					resolved = append(resolved, ref)
+				}
+				continue
+			}
+
+			// Handle data URLs (already resolved by resolveMediaRefs): discard them
+			// since the model does not support vision. The path tag and description
+			// above will guide the LLM to use tools instead.
+			if strings.HasPrefix(ref, "data:") {
+				continue
+			}
+
+			// Other refs: keep as-is
+			resolved = append(resolved, ref)
+		}
+
+		result[i].Media = resolved
+		if len(pathTags) > 0 {
+			result[i].Content = injectPathTags(result[i].Content, pathTags)
+			// Append a description to help the LLM understand what to do with the image
+			for _, desc := range descriptions {
+				if result[i].Content != "" {
+					result[i].Content += "\n\n" + desc
+				} else {
+					result[i].Content = desc
+				}
+			}
+		}
+	}
+
+	return result
 }

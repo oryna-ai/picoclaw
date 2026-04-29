@@ -33,6 +33,19 @@ func (p *Pipeline) CallLLM(
 		exec.messages = resolveMediaRefs(exec.messages, p.MediaStore, maxMediaSize)
 	}
 
+	// PreLLM: if the current model does not support vision, replace image data
+	// URLs with local file path tags ([image:/path]) so the LLM can use tools
+	// (e.g. load_image, MCP tools) to process the image instead of sending raw
+	// base64 data that would hang or be rejected by a text-only model.
+	if hasMediaRefs(exec.messages) && p.Cfg.Agents.Defaults.ImageModel == "" {
+		logger.WarnCF("agent", "Media detected but no ImageModel configured; injecting image path tags for tool-based processing",
+			map[string]any{
+				"agent_id": ts.agent.ID,
+				"model":    exec.activeModel,
+			})
+		exec.messages = injectImagePathTags(exec.messages, p.MediaStore)
+	}
+
 	// PreLLM: graceful terminal handling
 	exec.gracefulTerminal, _ = ts.gracefulInterruptRequested()
 	exec.providerToolDefs = ts.agent.Tools.ToProviderDefs()
@@ -171,11 +184,28 @@ func (p *Pipeline) CallLLM(
 		al.activeRequests.Add(1)
 		defer al.activeRequests.Done()
 
+		logger.InfoCF("agent", "CallLLM: starting LLM provider call",
+			map[string]any{
+				"agent_id":     ts.agent.ID,
+				"iteration":    iteration,
+				"model":        exec.llmModel,
+				"messages":     len(messagesForCall),
+				"tools":        len(toolDefsForCall),
+				"has_fallback": len(exec.activeCandidates) > 1 && p.Fallback != nil,
+			})
+
 		if len(exec.activeCandidates) > 1 && p.Fallback != nil {
 			fbResult, fbErr := p.Fallback.Execute(
 				providerCtx,
 				exec.activeCandidates,
 				func(ctx context.Context, provider, model string) (*providers.LLMResponse, error) {
+					logger.InfoCF("agent", "CallLLM: fallback attempt",
+						map[string]any{
+							"agent_id":  ts.agent.ID,
+							"iteration": iteration,
+							"provider":  provider,
+							"model":     model,
+						})
 					candidateProvider := exec.activeProvider
 					if cp, ok := ts.agent.CandidateProviders[providers.ModelKey(provider, model)]; ok {
 						candidateProvider = cp
@@ -184,6 +214,12 @@ func (p *Pipeline) CallLLM(
 				},
 			)
 			if fbErr != nil {
+				logger.WarnCF("agent", "CallLLM: fallback failed",
+					map[string]any{
+						"agent_id":  ts.agent.ID,
+						"iteration": iteration,
+						"error":     fbErr.Error(),
+					})
 				return nil, fbErr
 			}
 			if fbResult.Provider != "" && len(fbResult.Attempts) > 0 {
@@ -194,9 +230,38 @@ func (p *Pipeline) CallLLM(
 					map[string]any{"agent_id": ts.agent.ID, "iteration": iteration},
 				)
 			}
+			logger.InfoCF("agent", "CallLLM: fallback completed",
+				map[string]any{
+					"agent_id":  ts.agent.ID,
+					"iteration": iteration,
+				})
 			return fbResult.Response, nil
 		}
-		return exec.activeProvider.Chat(providerCtx, messagesForCall, toolDefsForCall, exec.llmModel, exec.llmOpts)
+		logger.InfoCF("agent", "CallLLM: calling provider.Chat",
+			map[string]any{
+				"agent_id":  ts.agent.ID,
+				"iteration": iteration,
+				"model":     exec.llmModel,
+			})
+		resp, chatErr := exec.activeProvider.Chat(providerCtx, messagesForCall, toolDefsForCall, exec.llmModel, exec.llmOpts)
+		if chatErr != nil {
+			logger.WarnCF("agent", "CallLLM: provider.Chat failed",
+				map[string]any{
+					"agent_id":  ts.agent.ID,
+					"iteration": iteration,
+					"error":     chatErr.Error(),
+				})
+		} else {
+			logger.InfoCF("agent", "CallLLM: provider.Chat completed",
+				map[string]any{
+					"agent_id":      ts.agent.ID,
+					"iteration":     iteration,
+					"content_len":   len(resp.Content),
+					"tool_calls":    len(resp.ToolCalls),
+					"finish_reason": resp.FinishReason,
+				})
+		}
+		return resp, chatErr
 	}
 
 	// Retry loop
