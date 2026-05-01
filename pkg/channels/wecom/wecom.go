@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -24,7 +25,8 @@ const (
 	wecomConnectTimeout    = 15 * time.Second
 	wecomCommandTimeout    = 10 * time.Second
 	wecomUploadTimeout     = 30 * time.Second
-	wecomHeartbeatInterval = 30 * time.Second
+	wecomHeartbeatInterval = 15 * time.Second
+	wecomHeartbeatTimeout  = 5 * time.Second
 	wecomStreamMaxDuration = 5*time.Minute + 30*time.Second
 	wecomStreamMinInterval = 500 * time.Millisecond
 	wecomRouteTTL          = 30 * time.Minute
@@ -337,7 +339,14 @@ func (c *WeComChannel) runConnection() error {
 	dialCtx, cancel := context.WithTimeout(c.ctx, wecomConnectTimeout)
 	defer cancel()
 
-	conn, resp, err := websocket.DefaultDialer.DialContext(dialCtx, c.config.WebSocketURL, nil)
+	dialer := &websocket.Dialer{
+		HandshakeTimeout: wecomConnectTimeout,
+		NetDialContext: (&net.Dialer{
+			Timeout:   wecomConnectTimeout,
+			KeepAlive: 15 * time.Second,
+		}).DialContext,
+	}
+	conn, resp, err := dialer.DialContext(dialCtx, c.config.WebSocketURL, nil)
 	if resp != nil {
 		_ = resp.Body.Close()
 	}
@@ -395,7 +404,7 @@ func (c *WeComChannel) heartbeatLoop(conn *websocket.Conn) {
 			if err := c.writeAndWait(conn, wecomCommand{
 				Cmd:     wecomCmdPing,
 				Headers: wecomHeaders{ReqID: randomID(10)},
-			}, wecomCommandTimeout); err != nil {
+			}, wecomHeartbeatTimeout); err != nil {
 				logger.WarnCF("wecom", "Heartbeat failed", map[string]any{"error": err.Error()})
 				_ = conn.Close()
 				return

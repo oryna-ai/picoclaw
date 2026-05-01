@@ -147,6 +147,12 @@ func (t *CronTool) Execute(ctx context.Context, args map[string]any) *ToolResult
 func (t *CronTool) addJob(ctx context.Context, args map[string]any) *ToolResult {
 	channel := ToolChannel(ctx)
 	chatID := ToolChatID(ctx)
+	sessionKey := ToolSessionKey(ctx)
+
+	// 拒绝从 heartbeat 创建 cron 任务，防止心跳自动恢复已删除的任务
+	if sessionKey == "heartbeat" {
+		return ErrorResult("cannot schedule cron jobs from heartbeat")
+	}
 
 	if channel == "" || chatID == "" {
 		return ErrorResult("no session context (channel/chat_id not set). Use this tool in an active conversation.")
