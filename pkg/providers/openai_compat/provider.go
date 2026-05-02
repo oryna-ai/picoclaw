@@ -63,6 +63,7 @@ var stripModelPrefixProviders = map[string]struct{}{
 	"minimax":    {},
 	"novita":     {},
 	"lmstudio":   {},
+	"laiyou":     {},
 }
 
 func WithMaxTokensField(maxTokensField string) Option {
