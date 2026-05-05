@@ -215,6 +215,7 @@ func appendRuntimeEventSourceFields(fields map[string]any, source runtimeevents.
 
 func appendRuntimeEventScopeFields(fields map[string]any, scope runtimeevents.Scope) {
 	setStringField(fields, "runtime_id", scope.RuntimeID)
+	setStringField(fields, "state_id", scope.StateID)
 	setStringField(fields, "agent_id", scope.AgentID)
 	setStringField(fields, "session_key", scope.SessionKey)
 	setStringField(fields, "turn_id", scope.TurnID)

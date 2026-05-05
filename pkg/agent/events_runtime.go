@@ -15,6 +15,7 @@ func runtimeScopeFromHookMeta(meta HookMeta, eventCtx *TurnContext) runtimeevent
 		AgentID:    meta.AgentID,
 		SessionKey: meta.SessionKey,
 		TurnID:     meta.TurnID,
+		StateID:    meta.StateID,
 	}
 
 	if eventCtx == nil || eventCtx.Inbound == nil {

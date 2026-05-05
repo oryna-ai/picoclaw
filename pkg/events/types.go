@@ -36,6 +36,7 @@ type Source struct {
 // in Source, Payload, or Attrs.
 type Scope struct {
 	RuntimeID string `json:"runtime_id,omitempty"`
+	StateID   string `json:"state_id,omitempty"`
 
 	AgentID    string `json:"agent_id,omitempty"`
 	SessionKey string `json:"session_key,omitempty"`

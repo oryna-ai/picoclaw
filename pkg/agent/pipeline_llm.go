@@ -121,7 +121,7 @@ func (p *Pipeline) CallLLM(
 		case HookActionAbortTurn:
 			exec.abortedByHook = true
 			al.emitEvent(
-				EventKindError,
+				runtimeevents.KindAgentError,
 				ts.eventMeta("runTurn", "turn.error"),
 				ErrorPayload{
 					Stage:   "before_llm_hook",
@@ -133,7 +133,7 @@ func (p *Pipeline) CallLLM(
 			_ = ts.requestHardAbort()
 			exec.abortedByHardAbort = true
 			al.emitEvent(
-				EventKindError,
+				runtimeevents.KindAgentError,
 				ts.eventMeta("runTurn", "turn.error"),
 				ErrorPayload{
 					Stage:   "before_llm_hook",
@@ -500,7 +500,7 @@ func (p *Pipeline) CallLLM(
 		case HookActionAbortTurn:
 			exec.abortedByHook = true
 			al.emitEvent(
-				EventKindError,
+				runtimeevents.KindAgentError,
 				ts.eventMeta("runTurn", "turn.error"),
 				ErrorPayload{
 					Stage:   "after_llm_hook",
@@ -512,7 +512,7 @@ func (p *Pipeline) CallLLM(
 			_ = ts.requestHardAbort()
 			exec.abortedByHardAbort = true
 			al.emitEvent(
-				EventKindError,
+				runtimeevents.KindAgentError,
 				ts.eventMeta("runTurn", "turn.error"),
 				ErrorPayload{
 					Stage:   "after_llm_hook",
