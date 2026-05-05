@@ -63,7 +63,6 @@ var stripModelPrefixProviders = map[string]struct{}{
 	"minimax":    {},
 	"novita":     {},
 	"lmstudio":   {},
-	"laiyou":     {},
 }
 
 func WithMaxTokensField(maxTokensField string) Option {
@@ -256,9 +255,28 @@ func filterDeepSeekReasoningMessages(messages []Message) []Message {
 }
 
 func filterDeepSeekReasoningTurn(messages []Message) []Message {
+	hasToolInteraction := false
+	for _, msg := range messages {
+		if msg.Role == "tool" || (msg.Role == "assistant" && len(msg.ToolCalls) > 0) {
+			hasToolInteraction = true
+			break
+		}
+	}
+
 	out := make([]Message, 0, len(messages))
 	for _, msg := range messages {
+		if messageutil.IsTransientAssistantThoughtMessage(msg) {
+			continue
+		}
+
 		cloned := msg
+		// DeepSeek thinking-mode replay only requires reasoning_content for
+		// turns that participate in a tool interaction round. For plain
+		// assistant turns between two user messages, the docs say the API will
+		// ignore reasoning_content on replay, so we strip it here.
+		if cloned.Role == "assistant" && strings.TrimSpace(cloned.ReasoningContent) != "" && !hasToolInteraction {
+			cloned.ReasoningContent = ""
+		}
 		if assistantMessageEmpty(cloned) {
 			continue
 		}

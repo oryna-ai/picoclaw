@@ -40,6 +40,14 @@ func NormalizeOutboundMessage(msg OutboundMessage) OutboundMessage {
 	if msg.Context.ReplyToMessageID == "" {
 		msg.Context.ReplyToMessageID = msg.ReplyToMessageID
 	}
+	// Fallback: if AgentID is not set explicitly, try to extract it from
+	// Context.Raw["agent_id"] which may have been populated by the channel
+	// layer when the inbound message was received.
+	if msg.AgentID == "" && msg.Context.Raw != nil {
+		if agentID, ok := msg.Context.Raw["agent_id"]; ok && agentID != "" {
+			msg.AgentID = strings.TrimSpace(agentID)
+		}
+	}
 	msg.Scope = cloneOutboundScope(msg.Scope)
 	return msg
 }

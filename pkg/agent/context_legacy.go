@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sipeed/picoclaw/pkg/bus"
+	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
 )
@@ -50,7 +51,7 @@ func (m *legacyContextManager) Compact(_ context.Context, req *CompactRequest) e
 			scope := m.al.newTurnEventScope(req.AgentID, req.SessionKey, turnCtx)
 			scope.stateID = req.StateID
 			m.al.emitEvent(
-				EventKindContextCompress,
+				runtimeevents.KindAgentContextCompress,
 				scope.meta(0, "forceCompression", "turn.context.compress"),
 				ContextCompressPayload{
 					Reason:            req.Reason,
@@ -263,7 +264,7 @@ func (m *legacyContextManager) summarizeSession(agent *AgentInstance, sessionKey
 		scope := m.al.newTurnEventScope(agent.ID, sessionKey, turnCtx)
 		scope.stateID = stateID
 		m.al.emitEvent(
-			EventKindSessionSummarize,
+			runtimeevents.KindAgentSessionSummarize,
 			scope.meta(0, "summarizeSession", "turn.session.summarize"),
 			SessionSummarizePayload{
 				SummarizedMessages: len(validMessages),

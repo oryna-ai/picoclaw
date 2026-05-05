@@ -440,9 +440,9 @@ func (ts *turnState) hardAbortRequested() bool {
 	return ts.hardAbort
 }
 
-func (ts *turnState) eventMeta(source, tracePath string) EventMeta {
+func (ts *turnState) eventMeta(source, tracePath string) HookMeta {
 	snap := ts.snapshot()
-	return EventMeta{
+	return HookMeta{
 		AgentID:     snap.AgentID,
 		TurnID:      snap.TurnID,
 		StateID:     ts.stateID,
