@@ -20,6 +20,7 @@ const (
 	defaultHookInterceptorTimeout = 5 * time.Second
 	defaultHookApprovalTimeout    = 60 * time.Second
 	hookObserverBufferSize        = 64
+	maxConcurrentObservers        = 128
 )
 
 type HookAction string
@@ -204,6 +205,8 @@ type HookManager struct {
 	hooks   map[string]HookRegistration
 	ordered []HookRegistration
 
+	observerSem chan struct{}
+
 	runtimeSub  runtimeevents.Subscription
 	runtimeDone chan struct{}
 	closeOnce   sync.Once
@@ -216,6 +219,7 @@ func NewHookManager(runtimeEvents runtimeevents.EventChannel) *HookManager {
 		interceptorTimeout: defaultHookInterceptorTimeout,
 		approvalTimeout:    defaultHookApprovalTimeout,
 		hooks:              make(map[string]HookRegistration),
+		observerSem:        make(chan struct{}, maxConcurrentObservers),
 		runtimeDone:        make(chan struct{}),
 	}
 
@@ -604,30 +608,30 @@ func (hm *HookManager) runRuntimeObserver(
 	observer RuntimeEventObserver,
 	evt runtimeevents.Event,
 ) {
-	ctx, cancel := context.WithTimeout(context.Background(), hm.observerTimeout)
-	defer cancel()
-
-	done := make(chan error, 1)
-	go func() {
-		done <- observer.OnRuntimeEvent(ctx, evt)
-	}()
-
 	select {
-	case err := <-done:
-		if err != nil {
+	case hm.observerSem <- struct{}{}:
+	default:
+		logger.WarnCF("hooks", "Runtime event observer dropped (semaphore full)", map[string]any{
+			"hook":  name,
+			"event": evt.Kind.String(),
+		})
+		return
+	}
+
+	go func() {
+		defer func() { <-hm.observerSem }()
+
+		ctx, cancel := context.WithTimeout(context.Background(), hm.observerTimeout)
+		defer cancel()
+
+		if err := observer.OnRuntimeEvent(ctx, evt); err != nil {
 			logger.WarnCF("hooks", "Runtime event observer failed", map[string]any{
 				"hook":  name,
 				"event": evt.Kind.String(),
 				"error": err.Error(),
 			})
 		}
-	case <-ctx.Done():
-		logger.WarnCF("hooks", "Runtime event observer timed out", map[string]any{
-			"hook":       name,
-			"event":      evt.Kind.String(),
-			"timeout_ms": hm.observerTimeout.Milliseconds(),
-		})
-	}
+	}()
 }
 
 func (hm *HookManager) callBeforeLLM(
