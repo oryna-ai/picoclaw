@@ -45,6 +45,15 @@ func (al *AgentLoop) PublishResponseIfNeeded(ctx context.Context, channel, chatI
 		return
 	}
 
+	// Clean up last-turn metadata after this publish (or skip) completes.
+	// The entry was stored by registerActiveTurn and is no longer needed
+	// once the outbound response has been dispatched.
+	defer func() {
+		if sessionKey != "" {
+			al.lastTurnMeta.Delete(sessionKey)
+		}
+	}()
+
 	alreadySentToSameChat := false
 	defaultAgent := al.GetRegistry().GetDefaultAgent()
 	if defaultAgent != nil {
@@ -65,8 +74,19 @@ func (al *AgentLoop) PublishResponseIfNeeded(ctx context.Context, channel, chatI
 	}
 
 	msg := bus.OutboundMessage{
-		Context: bus.NewOutboundContext(channel, chatID, ""),
-		Content: response,
+		Context:    bus.NewOutboundContext(channel, chatID, ""),
+		SessionKey: sessionKey,
+		Content:    response,
+	}
+	if ts := al.getActiveTurnState(sessionKey); ts != nil {
+		msg.AgentID = ts.agentID
+		msg.TurnID = ts.turnID
+		msg.StateID = ts.stateID
+	} else if meta, ok := al.lastTurnMeta.Load(sessionKey); ok {
+		tm := meta.(turnMeta)
+		msg.AgentID = tm.AgentID
+		msg.TurnID = tm.TurnID
+		msg.StateID = tm.StateID
 	}
 	if sessionKey != "" {
 		msg.ContextUsage = computeContextUsage(al.agentForSession(sessionKey), sessionKey)

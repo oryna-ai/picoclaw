@@ -81,6 +81,14 @@ type channelWorker struct {
 	limiter    *rate.Limiter
 }
 
+// OutboundHook is the interface for outbound message interception.
+// It mirrors agent.OutboundInterceptor but lives in the channels package
+// to avoid circular dependencies.
+type OutboundHook interface {
+	BeforeOutbound(ctx context.Context, name string, msg *bus.OutboundMessage) (*bus.OutboundMessage, bool, error)
+	AfterOutbound(ctx context.Context, name string, msg *bus.OutboundMessage, msgIDs []string, sendErr error)
+}
+
 type Manager struct {
 	channels      map[string]Channel
 	workers       map[string]*channelWorker
@@ -98,6 +106,7 @@ type Manager struct {
 	reactionUndos sync.Map          // "channel:chatID" → reactionEntry
 	streamActive  sync.Map          // "channel:chatID" → true (set when streamer.Finalize sent the message)
 	channelHashes map[string]string // channel name → config hash
+	outboundHook  OutboundHook      // optional outbound message interceptor
 }
 
 // ManagerOption configures a channel Manager.
@@ -108,6 +117,23 @@ func WithRuntimeEvents(eventBus runtimeevents.Bus) ManagerOption {
 	return func(m *Manager) {
 		m.runtimeEvents = eventBus
 	}
+}
+
+// WithOutboundHook injects an outbound message interceptor.
+func WithOutboundHook(hook OutboundHook) ManagerOption {
+	return func(m *Manager) {
+		m.outboundHook = hook
+	}
+}
+
+// SetOutboundHook sets or replaces the outbound message interceptor on an
+// already-created Manager. This is useful when the hook is only available
+// after the Manager has been constructed.
+func (m *Manager) SetOutboundHook(hook OutboundHook) {
+	if m == nil {
+		return
+	}
+	m.outboundHook = hook
 }
 
 // ChannelLifecyclePayload describes channel lifecycle runtime events.
@@ -1126,12 +1152,31 @@ func (m *Manager) sendWithRetry(
 		return msgIDs, true
 	}
 
+	// BeforeOutbound hook: allow interceptor to modify or skip the message
+	if m.outboundHook != nil {
+		modified, skip, err := m.outboundHook.BeforeOutbound(ctx, name, &msg)
+		if err != nil {
+			logger.WarnCF("channels", "Outbound hook BeforeOutbound failed", map[string]any{
+				"channel": name,
+				"error":   err.Error(),
+			})
+		} else if skip {
+			return nil, true
+		} else if modified != nil {
+			msg = *modified
+		}
+	}
+
 	var lastErr error
 	var msgIDs []string
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		msgIDs, lastErr = w.ch.Send(ctx, msg)
 		if lastErr == nil {
 			m.publishOutboundSent(name, msg, msgIDs)
+			// AfterOutbound hook: notify interceptor of successful send
+			if m.outboundHook != nil {
+				m.outboundHook.AfterOutbound(ctx, name, &msg, msgIDs, nil)
+			}
 			return msgIDs, true
 		}
 
@@ -1172,6 +1217,11 @@ func (m *Manager) sendWithRetry(
 		"retries": maxRetries,
 	})
 	m.publishOutboundFailed(name, msg, lastErr, false)
+
+	// AfterOutbound hook: notify interceptor of failed send
+	if m.outboundHook != nil {
+		m.outboundHook.AfterOutbound(ctx, name, &msg, nil, lastErr)
+	}
 
 	return nil, false
 }

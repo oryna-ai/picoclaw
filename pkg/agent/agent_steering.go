@@ -9,6 +9,30 @@ import (
 	"github.com/sipeed/picoclaw/pkg/logger"
 )
 
+// fireAfterInbound is called from runAgentLoop after turnScope is created
+// but before runTurn starts. At this point TurnID/StateID are known and the
+// hook fires before any LLM/tool processing.
+func (al *AgentLoop) fireAfterInbound(ctx context.Context, opts processOptions, ts *turnState) {
+	if al.hooks == nil || opts.InboundMessage == nil {
+		return
+	}
+	msg := *opts.InboundMessage
+	meta := HookMeta{
+		AgentID:    ts.agentID,
+		TurnID:     ts.turnID,
+		StateID:    ts.stateID,
+		SessionKey: ts.sessionKey,
+		Channel:    ts.channel,
+		ChatID:     ts.chatID,
+	}
+	resp := &InboundHookResponse{
+		Meta:    meta,
+		Context: &TurnContext{Inbound: &msg.Context},
+		Message: msg,
+	}
+	al.hooks.AfterInbound(ctx, resp)
+}
+
 func (al *AgentLoop) processMessageSync(ctx context.Context, msg bus.InboundMessage) {
 	if al.channelManager != nil {
 		defer al.channelManager.InvokeTypingStop(msg.Channel, msg.ChatID)

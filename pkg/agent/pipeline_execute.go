@@ -111,6 +111,9 @@ toolLoop:
 									"is_tool_call": "true",
 								},
 							},
+							TurnID:  ts.turnID,
+							StateID: ts.stateID,
+							AgentID: ts.agentID,
 							Content: hookResult.ForUser,
 						})
 					}

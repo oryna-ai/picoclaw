@@ -33,6 +33,14 @@ func (al *AgentLoop) ResetTools() {
 
 func (al *AgentLoop) SetChannelManager(cm *channels.Manager) {
 	al.channelManager = cm
+	// Inject outbound hook adapter so the agent's hook system can intercept
+	// outbound messages sent through the channel manager.
+	if cm != nil && al.hooks != nil {
+		adapter := NewOutboundHookAdapter(al.hooks)
+		if adapter != nil {
+			cm.SetOutboundHook(adapter)
+		}
+	}
 }
 
 func (al *AgentLoop) GetRegistry() *AgentRegistry {

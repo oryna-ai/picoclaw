@@ -65,7 +65,12 @@ type AgentLoop struct {
 
 	// activeTurnStates tracks active turns per session to prevent duplicates.
 	activeTurnStates sync.Map
-	subTurnCounter   atomic.Int64
+	// lastTurnMeta stores turn identity per session so downstream callers
+	// (e.g. PublishResponseIfNeeded) can populate hook metadata after the
+	// turn has ended and been cleared from activeTurnStates. Entries are
+	// removed on first read in PublishResponseIfNeeded to bound growth.
+	lastTurnMeta   sync.Map
+	subTurnCounter atomic.Int64
 
 	turnSeq        atomic.Uint64
 	activeRequests sync.WaitGroup
@@ -101,6 +106,7 @@ type processOptions struct {
 	InboundContext          *bus.InboundContext    // Normalized inbound facts for events/hooks
 	RouteResult             *routing.ResolvedRoute // Route decision snapshot for events/hooks
 	SessionScope            *session.SessionScope  // Session scope snapshot for events/hooks
+	InboundMessage          *bus.InboundMessage    // Original inbound message for AfterInbound hook
 }
 
 type continuationTarget struct {
@@ -510,6 +516,7 @@ func (al *AgentLoop) runAgentLoop(
 		newTurnContext(opts.Dispatch.InboundContext, opts.Dispatch.RouteResult, opts.Dispatch.SessionScope),
 	)
 	ts := newTurnState(agent, opts, turnScope)
+	al.fireAfterInbound(ctx, opts, ts)
 	pipeline := NewPipeline(al)
 	result, err := al.runTurn(ctx, ts, pipeline)
 	if err != nil {
@@ -544,6 +551,8 @@ func (al *AgentLoop) runAgentLoop(
 			),
 			AgentID:      agentID,
 			SessionKey:   sessionKey,
+			TurnID:       ts.turnID,
+			StateID:      ts.stateID,
 			Scope:        scope,
 			Content:      result.finalContent,
 			ContextUsage: computeContextUsage(agent, opts.Dispatch.SessionKey),

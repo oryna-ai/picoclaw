@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sipeed/picoclaw/pkg/bus"
 	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
 	"github.com/sipeed/picoclaw/pkg/logger"
 	"github.com/sipeed/picoclaw/pkg/providers"
@@ -89,6 +90,13 @@ type ToolInterceptor interface {
 
 type ToolApprover interface {
 	ApproveTool(ctx context.Context, req *ToolApprovalRequest) (ApprovalDecision, error)
+}
+
+// MessageInterceptor allows hooks to observe inbound and outbound messages
+// with complete turn metadata.
+type MessageInterceptor interface {
+	AfterInbound(ctx context.Context, resp *InboundHookResponse) (*InboundHookResponse, HookDecision, error)
+	AfterOutbound(ctx context.Context, resp *OutboundHookResponse) (*OutboundHookResponse, HookDecision, error)
 }
 
 type LLMHookRequest struct {
@@ -192,6 +200,47 @@ func (r *ToolResultHookResponse) Clone() *ToolResultHookResponse {
 	cloned.Context = cloneTurnContext(r.Context)
 	cloned.Arguments = cloneStringAnyMap(r.Arguments)
 	cloned.Result = cloneToolResult(r.Result)
+	return &cloned
+}
+
+// OutboundHookResponse is passed to MessageInterceptor.AfterOutbound.
+type OutboundHookResponse struct {
+	Meta       HookMeta            `json:"meta"`
+	Context    *TurnContext        `json:"context,omitempty"`
+	Message    bus.OutboundMessage `json:"message"`
+	MessageIDs []string            `json:"message_ids,omitempty"`
+	Error      string              `json:"error,omitempty"`
+}
+
+func (r *OutboundHookResponse) Clone() *OutboundHookResponse {
+	if r == nil {
+		return nil
+	}
+	cloned := *r
+	cloned.Meta = cloneHookMeta(r.Meta)
+	cloned.Context = cloneTurnContext(r.Context)
+	cloned.Message = cloneOutboundMessage(r.Message)
+	cloned.MessageIDs = append([]string(nil), r.MessageIDs...)
+	return &cloned
+}
+
+// InboundHookResponse is passed to MessageInterceptor.AfterInbound.
+type InboundHookResponse struct {
+	Meta     HookMeta          `json:"meta"`
+	Context  *TurnContext      `json:"context,omitempty"`
+	Message  bus.InboundMessage `json:"message"`
+	Response string            `json:"response,omitempty"`
+	Error    string            `json:"error,omitempty"`
+}
+
+func (r *InboundHookResponse) Clone() *InboundHookResponse {
+	if r == nil {
+		return nil
+	}
+	cloned := *r
+	cloned.Meta = cloneHookMeta(r.Meta)
+	cloned.Context = cloneTurnContext(r.Context)
+	cloned.Message = cloneInboundMessage(r.Message)
 	return &cloned
 }
 
@@ -541,7 +590,70 @@ func (hm *HookManager) AfterTool(
 	return current, HookDecision{Action: HookActionContinue}
 }
 
+func (hm *HookManager) AfterOutbound(ctx context.Context, resp *OutboundHookResponse) (*OutboundHookResponse, HookDecision) {
+	if hm == nil || resp == nil {
+		return resp, HookDecision{Action: HookActionContinue}
+	}
+
+	current := resp.Clone()
+	for _, reg := range hm.snapshotHooks() {
+		interceptor, ok := reg.Hook.(MessageInterceptor)
+		if !ok {
+			continue
+		}
+
+		next, decision, ok := hm.callAfterOutbound(ctx, reg.Name, interceptor, current.Clone())
+		if !ok {
+			continue
+		}
+
+		switch decision.normalizedAction() {
+		case HookActionContinue, HookActionModify:
+			if next != nil {
+				current = next
+			}
+		case HookActionAbortTurn, HookActionHardAbort:
+			return current, decision
+		default:
+			hm.logUnsupportedAction(reg.Name, "after_outbound", decision.Action)
+		}
+	}
+	return current, HookDecision{Action: HookActionContinue}
+}
+
+func (hm *HookManager) AfterInbound(ctx context.Context, resp *InboundHookResponse) (*InboundHookResponse, HookDecision) {
+	if hm == nil || resp == nil {
+		return resp, HookDecision{Action: HookActionContinue}
+	}
+
+	current := resp.Clone()
+	for _, reg := range hm.snapshotHooks() {
+		interceptor, ok := reg.Hook.(MessageInterceptor)
+		if !ok {
+			continue
+		}
+
+		next, decision, ok := hm.callAfterInbound(ctx, reg.Name, interceptor, current.Clone())
+		if !ok {
+			continue
+		}
+
+		switch decision.normalizedAction() {
+		case HookActionContinue, HookActionModify:
+			if next != nil {
+				current = next
+			}
+		case HookActionAbortTurn, HookActionHardAbort:
+			return current, decision
+		default:
+			hm.logUnsupportedAction(reg.Name, "after_inbound", decision.Action)
+		}
+	}
+	return current, HookDecision{Action: HookActionContinue}
+}
+
 func (hm *HookManager) ApproveTool(ctx context.Context, req *ToolApprovalRequest) ApprovalDecision {
+
 	if hm == nil || req == nil {
 		return ApprovalDecision{Approved: true}
 	}
@@ -698,6 +810,40 @@ func (hm *HookManager) callAfterTool(
 		"after_tool",
 		func(ctx context.Context) (*ToolResultHookResponse, HookDecision, error) {
 			return interceptor.AfterTool(ctx, resultView)
+		},
+	)
+}
+
+func (hm *HookManager) callAfterOutbound(
+	parent context.Context,
+	name string,
+	interceptor MessageInterceptor,
+	resp *OutboundHookResponse,
+) (*OutboundHookResponse, HookDecision, bool) {
+	return runInterceptorHook(
+		parent,
+		hm.interceptorTimeout,
+		name,
+		"after_outbound",
+		func(ctx context.Context) (*OutboundHookResponse, HookDecision, error) {
+			return interceptor.AfterOutbound(ctx, resp)
+		},
+	)
+}
+
+func (hm *HookManager) callAfterInbound(
+	parent context.Context,
+	name string,
+	interceptor MessageInterceptor,
+	resp *InboundHookResponse,
+) (*InboundHookResponse, HookDecision, bool) {
+	return runInterceptorHook(
+		parent,
+		hm.interceptorTimeout,
+		name,
+		"after_inbound",
+		func(ctx context.Context) (*InboundHookResponse, HookDecision, error) {
+			return interceptor.AfterInbound(ctx, resp)
 		},
 	)
 }
@@ -933,6 +1079,55 @@ func cloneToolResult(result *tools.ToolResult) *tools.ToolResult {
 		copy(cloned.Messages, result.Messages)
 	}
 	return &cloned
+}
+
+func cloneInboundMessage(msg bus.InboundMessage) bus.InboundMessage {
+	cloned := msg
+	cloned.Context = cloneOutboundInboundContext(msg.Context)
+	if len(msg.Media) > 0 {
+		cloned.Media = append([]string(nil), msg.Media...)
+	}
+	return cloned
+}
+
+func cloneOutboundMessage(msg bus.OutboundMessage) bus.OutboundMessage {
+	cloned := msg
+	cloned.Context = cloneOutboundInboundContext(msg.Context)
+	if msg.Scope != nil {
+		scope := *msg.Scope
+		if len(scope.Dimensions) > 0 {
+			scope.Dimensions = append([]string(nil), scope.Dimensions...)
+		}
+		if len(scope.Values) > 0 {
+			scope.Values = make(map[string]string, len(scope.Values))
+			for k, v := range msg.Scope.Values {
+				scope.Values[k] = v
+			}
+		}
+		cloned.Scope = &scope
+	}
+	if msg.ContextUsage != nil {
+		usage := *msg.ContextUsage
+		cloned.ContextUsage = &usage
+	}
+	return cloned
+}
+
+func cloneOutboundInboundContext(ctx bus.InboundContext) bus.InboundContext {
+	cloned := ctx
+	if len(ctx.ReplyHandles) > 0 {
+		cloned.ReplyHandles = make(map[string]string, len(ctx.ReplyHandles))
+		for k, v := range ctx.ReplyHandles {
+			cloned.ReplyHandles[k] = v
+		}
+	}
+	if len(ctx.Raw) > 0 {
+		cloned.Raw = make(map[string]string, len(ctx.Raw))
+		for k, v := range ctx.Raw {
+			cloned.Raw[k] = v
+		}
+	}
+	return cloned
 }
 
 func closeHookIfPossible(hook any) {

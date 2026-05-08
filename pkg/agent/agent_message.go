@@ -200,6 +200,7 @@ func (al *AgentLoop) processMessage(ctx context.Context, msg bus.InboundMessage)
 			})
 	}
 
+	opts.InboundMessage = &msg
 	return al.runAgentLoop(ctx, agent, opts)
 }
 

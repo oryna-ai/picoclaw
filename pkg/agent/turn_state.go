@@ -87,6 +87,13 @@ type turnResult struct {
 }
 
 // =============================================================================
+// turnMeta stores turn identity for use after the turn has ended.
+type turnMeta struct {
+	TurnID  string
+	StateID string
+	AgentID string
+}
+
 // ActiveTurnInfo - public info about an active turn
 // =============================================================================
 
@@ -262,6 +269,11 @@ func newTurnState(agent *AgentInstance, opts processOptions, scope turnEventScop
 
 func (al *AgentLoop) registerActiveTurn(ts *turnState) {
 	al.activeTurnStates.Store(ts.sessionKey, ts)
+	al.lastTurnMeta.Store(ts.sessionKey, turnMeta{
+		TurnID:  ts.turnID,
+		StateID: ts.stateID,
+		AgentID: ts.agentID,
+	})
 }
 
 func (al *AgentLoop) clearActiveTurn(ts *turnState) {

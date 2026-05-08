@@ -162,10 +162,17 @@ func registerSharedTools(
 					tools.ToolSessionKey(ctx),
 					tools.ToolSessionScope(ctx),
 				)
+				turnID, stateID := "", ""
+				if ts := al.getActiveTurnState(outboundSessionKey); ts != nil {
+					turnID = ts.turnID
+					stateID = ts.stateID
+				}
 				return msgBus.PublishOutbound(pubCtx, bus.OutboundMessage{
 					Context:          outboundCtx,
 					AgentID:          outboundAgentID,
 					SessionKey:       outboundSessionKey,
+					TurnID:           turnID,
+					StateID:          stateID,
 					Scope:            outboundScope,
 					Content:          content,
 					ReplyToMessageID: replyToMessageID,

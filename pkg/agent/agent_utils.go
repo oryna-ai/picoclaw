@@ -73,6 +73,8 @@ func outboundMessageForTurn(ts *turnState, content string) bus.OutboundMessage {
 	return bus.OutboundMessage{
 		Channel: ts.channel,
 		ChatID:  ts.chatID,
+		TurnID:  ts.turnID,
+		StateID: ts.stateID,
 		Context: outboundContextFromInbound(
 			ts.opts.Dispatch.InboundContext,
 			ts.channel,
