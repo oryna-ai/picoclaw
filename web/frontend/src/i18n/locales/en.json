@@ -236,7 +236,8 @@
         "setting": "Setting as default...",
         "unavailable": "Cannot set unavailable model as default",
         "isDefault": "Already the default model",
-        "isVirtual": "Cannot set virtual model as default"
+        "isVirtual": "Cannot set virtual model as default",
+        "unsupportedProvider": "This provider is ASR-only and cannot be the default chat model"
       },
       "deleteDisabled": {
         "isDefault": "Cannot delete the default model"
@@ -244,7 +245,9 @@
     },
     "defaultOnSave": {
       "label": "Default Model",
-      "description": "Automatically set this model as default after saving."
+      "description": "Automatically set this model as default after saving.",
+      "unsupportedProvider": "This provider can be saved in model_list, but it cannot be used as the default chat model.",
+      "clearOnSave": "Saving this ASR-only model will clear the current default chat model selection."
     },
     "add": {
       "button": "Add Model",
@@ -255,7 +258,7 @@
       "modelNameHint": "A short name used to identify this model in conversations.",
       "modelId": "Model Identifier",
       "modelIdPlaceholder": "e.g. gpt-4o or openai/gpt-4o",
-      "modelIdHint": "If Provider is not specified, values such as openai/gpt-4o are interpreted using the provider/model format. If Provider is specified, this field is treated as the canonical model ID and is not parsed for a provider prefix.",
+      "modelIdHint": "This field is sent as the canonical model ID for the selected Provider. If the model ID itself contains slashes, such as openai/gpt-5.4, it is preserved as-is instead of being split again.",
       "errorRequired": "This field is required.",
       "errorDuplicateModelName": "Model alias already exists. Please use a different name.",
       "saveError": "Failed to add model",
@@ -272,8 +275,9 @@
     },
     "field": {
       "provider": "Provider",
-      "providerPlaceholder": "e.g. openai",
-      "providerHint": "Optional. If specified, this value is used as the effective provider, and Model Identifier is interpreted as the canonical model ID.",
+      "providerPlaceholder": "Select a provider",
+      "providerHint": "Choose a Provider from the backend catalog. The Model Identifier field is interpreted as that Provider's canonical model ID.",
+      "providerInvalid": "The current Provider is invalid. Select a supported Provider.",
       "apiBase": "API Base URL",
       "apiKey": "API Key",
       "apiKeyPlaceholder": "Enter your API key",
@@ -282,6 +286,7 @@
       "proxyHint": "Optional. e.g. http://127.0.0.1:7890",
       "authMethod": "Auth Method",
       "authMethodHint": "Authentication method: oauth, token. Leave blank for API key auth.",
+      "authMethodManagedHint": "This Provider manages its authentication mode automatically.",
       "connectMode": "Connect Mode",
       "connectModeHint": "Connection mode for CLI-based providers: stdio or grpc.",
       "workspace": "Workspace Path",
@@ -327,7 +332,8 @@
       "maixcam": "MaixCam",
       "matrix": "Matrix",
       "irc": "IRC",
-      "weixin": "WeChat"
+      "weixin": "WeChat",
+      "mqtt": "MQTT"
     },
     "weixin": {
       "bindTitle": "WeChat Account Binding",
@@ -452,11 +458,35 @@
         "channels": "IRC channels to join.",
         "requestCaps": "IRC capability list requested on connect.",
         "maxBase64FileSizeMiB": "Maximum size in MiB for converting local files to base64 before upload. 0 means unlimited. Applies only to local files, not URL uploads.",
-        "genericField": "Used to configure {{field}}."
+        "genericField": "Used to configure {{field}}.",
+        "broker": "MQTT broker address.",
+        "mqttAgentId": "Unique identifier for this instance, used to build the topic path.",
+        "topicPrefix": "Topic prefix. Defaults to /picoclaw.",
+        "mqttUsername": "Broker authentication username (optional).",
+        "mqttPassword": "Broker authentication password (optional).",
+        "mqttClientId": "MQTT client ID. Leave blank to auto-generate.",
+        "keepAlive": "Keepalive interval in seconds. Defaults to 60.",
+        "qos": "Message quality of service level: 0 = at most once, 1 = at least once, 2 = exactly once."
       }
     },
     "validation": {
       "requiredField": "This field is required."
+    },
+    "mqtt": {
+      "protocolTitle": "Protocol Reference",
+      "protocolDesc": "Clients send and receive messages using the following topic and payload format.",
+      "uplink": "Uplink (Client → Agent)",
+      "downlink": "Downlink (Agent → Client)",
+      "topicParams": "Topic Parameters",
+      "fieldText": "text",
+      "uplinkTextDesc": "Natural language instruction from the user (required).",
+      "downlinkTextDesc": "Agent reply text. In streaming mode, concatenate multiple messages in order for the full response.",
+      "topicPrefixDesc": "Topic prefix, matches the configuration above.",
+      "agentIdDesc": "Agent ID, matches the configuration above.",
+      "clientIdDesc": "Client-defined identifier. Recommended: generate a UUID on first launch and persist it so the same device always uses the same ID.",
+      "clientIdPlaceholder": "Auto-generated if blank",
+      "secretSet": "Already configured. Leave blank to keep unchanged.",
+      "secretEmpty": "Not configured"
     }
   },
   "pages": {
