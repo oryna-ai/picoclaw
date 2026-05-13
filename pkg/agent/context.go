@@ -196,31 +196,48 @@ func (cb *ContextBuilder) BuildSystemPromptParts() []PromptPart {
 		}
 	}
 
-	// Core identity section
-	add(PromptPart{
-		ID:      "kernel.identity",
-		Layer:   PromptLayerKernel,
-		Slot:    PromptSlotIdentity,
-		Source:  PromptSource{ID: PromptSourceKernel, Name: "identity"},
-		Title:   "picoclaw identity",
-		Content: cb.getIdentity(),
-		Stable:  true,
-		Cache:   PromptCacheEphemeral,
-	})
+	// Collect contributed parts first to check for overrides.
+	contributed, _ := cb.promptRegistryOrDefault().Collect(context.Background(), PromptBuildRequest{})
+	hasKernelIdentity := false
+	hasInstructionWorkspace := false
+	for _, part := range contributed {
+		if part.Layer == PromptLayerKernel && part.Slot == PromptSlotIdentity {
+			hasKernelIdentity = true
+		}
+		if part.Layer == PromptLayerInstruction && part.Slot == PromptSlotWorkspace {
+			hasInstructionWorkspace = true
+		}
+	}
 
-	// Bootstrap files
-	bootstrapContent := cb.LoadBootstrapFiles()
-	if bootstrapContent != "" {
+	// Core identity section — skipped when a contributor provides kernel/identity
+	if !hasKernelIdentity {
 		add(PromptPart{
-			ID:      "instruction.workspace",
-			Layer:   PromptLayerInstruction,
-			Slot:    PromptSlotWorkspace,
-			Source:  PromptSource{ID: PromptSourceWorkspace, Name: "workspace"},
-			Title:   "workspace instructions",
-			Content: bootstrapContent,
+			ID:      "kernel.identity",
+			Layer:   PromptLayerKernel,
+			Slot:    PromptSlotIdentity,
+			Source:  PromptSource{ID: PromptSourceKernel, Name: "identity"},
+			Title:   "picoclaw identity",
+			Content: cb.getIdentity(),
 			Stable:  true,
 			Cache:   PromptCacheEphemeral,
 		})
+	}
+
+	// Bootstrap files — skipped when a contributor provides instruction/workspace
+	if !hasInstructionWorkspace {
+		bootstrapContent := cb.LoadBootstrapFiles()
+		if bootstrapContent != "" {
+			add(PromptPart{
+				ID:      "instruction.workspace",
+				Layer:   PromptLayerInstruction,
+				Slot:    PromptSlotWorkspace,
+				Source:  PromptSource{ID: PromptSourceWorkspace, Name: "workspace"},
+				Title:   "workspace instructions",
+				Content: bootstrapContent,
+				Stable:  true,
+				Cache:   PromptCacheEphemeral,
+			})
+		}
 	}
 
 	// Skills - show summary, AI can read full content with read_file tool
@@ -726,12 +743,30 @@ func (cb *ContextBuilder) BuildMessagesFromPrompt(req PromptBuildRequest) []prov
 
 	promptParts := append([]PromptPart(nil), req.Overlays...)
 	promptParts = append(promptParts, cb.buildActiveSkillsPromptParts(req.ActiveSkills)...)
+	// Collect contributed parts for per-request overlays (e.g. active skills, steering).
+	// Static parts (kernel/identity, instruction/workspace) are already baked into
+	// staticPrompt via BuildSystemPromptWithCache → BuildSystemPromptParts, so we
+	// skip contributors whose content is already captured in the cached prompt.
+	// We detect this by checking if the contributor's parts overlap with the static
+	// prompt's known slots. For simplicity, we skip Collect entirely when the
+	// registry has contributors that provide kernel/identity or instruction/workspace,
+	// since those are the only slots that BuildSystemPromptParts handles and caches.
 	if contributedParts, err := cb.promptRegistryOrDefault().Collect(context.Background(), req); err != nil {
 		logger.WarnCF("agent", "Prompt contributor collection failed", map[string]any{
 			"error": err.Error(),
 		})
 	} else {
-		promptParts = append(promptParts, contributedParts...)
+		// Filter out parts that are already in the static prompt (kernel/identity,
+		// instruction/workspace) to avoid duplication.
+		for _, part := range contributedParts {
+			if part.Layer == PromptLayerKernel && part.Slot == PromptSlotIdentity {
+				continue
+			}
+			if part.Layer == PromptLayerInstruction && part.Slot == PromptSlotWorkspace {
+				continue
+			}
+			promptParts = append(promptParts, part)
+		}
 	}
 
 	if len(promptParts) > 0 {
