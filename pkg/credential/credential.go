@@ -66,9 +66,40 @@ var ErrPassphraseRequired = errors.New("credential: enc:// passphrase required")
 // indicating a wrong passphrase or SSH key. Callers can detect this with errors.Is.
 var ErrDecryptionFailed = errors.New("credential: enc:// decryption failed (wrong passphrase or SSH key?)")
 
+// ErrSSHKeyRequired is returned when no SSH key is available from SSHKeyProvider.
+var ErrSSHKeyRequired = errors.New("credential: SSH private key is required but not found" +
+	" (set PICOCLAW_SSH_KEY_PATH, place key at ~/.ssh/picoclaw_ed25519.key, or replace SSHKeyProvider)")
+
 // SSHKeyPathEnvVar is the environment variable that specifies the path to the
 // SSH private key used for enc:// credential encryption and decryption.
 const SSHKeyPathEnvVar = "PICOCLAW_SSH_KEY_PATH"
+
+// SSHKeyProvider returns the SSH private key bytes used for enc:// key derivation.
+// It defaults to reading from the file path resolved by pickSSHKeyPath.
+// Replace it at startup to provide the key from memory instead of a file.
+//
+// Example:
+//
+//	credential.SSHKeyProvider = func() ([]byte, error) {
+//	    return []byte("-----BEGIN OPENSSH PRIVATE KEY-----\n..."), nil
+//	}
+var SSHKeyProvider func() ([]byte, error) = func() ([]byte, error) {
+	path := pickSSHKeyPath("")
+	if path == "" {
+		return nil, ErrSSHKeyRequired
+	}
+	if !allowedSSHKeyPath(path) {
+		return nil, fmt.Errorf(
+			"credential: SSH key path %q is not in an allowed location (PICOCLAW_SSH_KEY_PATH, PICOCLAW_HOME, or ~/.ssh/)",
+			path,
+		)
+	}
+	sshBytes, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("credential: cannot read SSH key %q: %w", path, err)
+	}
+	return sshBytes, nil
+}
 
 // picoclawHome is a package-local copy of config.EnvHome. It is kept here to
 // avoid a circular import between pkg/credential and pkg/config.
@@ -160,8 +191,6 @@ func resolveEncrypted(raw string) (string, error) {
 		return "", ErrPassphraseRequired
 	}
 
-	sshKeyPath := pickSSHKeyPath("") // override="": consult env then auto-detect
-
 	b64 := strings.TrimPrefix(raw, EncScheme)
 	blob, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil {
@@ -175,7 +204,7 @@ func resolveEncrypted(raw string) (string, error) {
 	nonce := blob[saltLen : saltLen+nonceLen]
 	ciphertext := blob[saltLen+nonceLen:]
 
-	key, err := deriveKey(passphrase, sshKeyPath, salt)
+	key, err := deriveKey(passphrase, salt)
 	if err != nil {
 		return "", err
 	}
@@ -201,18 +230,19 @@ func resolveEncrypted(raw string) (string, error) {
 // sshKeyPath is the SSH private key file to use; pass "" to auto-detect via
 // PICOCLAW_SSH_KEY_PATH env var or ~/.ssh/picoclaw_ed25519.key.
 // An SSH private key must be resolvable or Encrypt returns an error.
+//
+// Priority: SSHKeyProvider (if replaced) > sshKeyPath argument > auto-detect.
 func Encrypt(passphrase, sshKeyPath, plaintext string) (string, error) {
 	if passphrase == "" {
 		return "", fmt.Errorf("credential: passphrase must not be empty")
 	}
-	sshKeyPath = pickSSHKeyPath(sshKeyPath)
 
 	salt := make([]byte, saltLen)
 	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
 		return "", fmt.Errorf("credential: failed to generate salt: %w", err)
 	}
 
-	key, err := deriveKey(passphrase, sshKeyPath, salt)
+	key, err := deriveKey(passphrase, salt)
 	if err != nil {
 		return "", err
 	}
@@ -279,12 +309,12 @@ func allowedSSHKeyPath(path string) bool {
 	return false
 }
 
-// deriveKey derives a 32-byte AES-256 key from passphrase and SSH private key.
+// deriveKeyFromFile derives a 32-byte AES-256 key from passphrase and SSH private key file.
 //
 // ikm = HMAC-SHA256(key=SHA256(sshKeyBytes), msg=passphrase)
 // Final key: HKDF-SHA256(ikm, salt, info="picoclaw-credential-v1", 32 bytes)
 // sshKeyPath must be non-empty; returns an error otherwise.
-func deriveKey(passphrase, sshKeyPath string, salt []byte) ([]byte, error) {
+func deriveKeyFromFile(passphrase, sshKeyPath string, salt []byte) ([]byte, error) {
 	if sshKeyPath == "" {
 		return nil, fmt.Errorf(
 			"credential: SSH private key is required but not found" +
@@ -300,6 +330,23 @@ func deriveKey(passphrase, sshKeyPath string, salt []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("credential: cannot read SSH key %q: %w", sshKeyPath, err)
 	}
+	return deriveKeyFromBytes(passphrase, sshBytes, salt)
+}
+
+// deriveKey derives a 32-byte AES-256 key from passphrase and SSHKeyProvider.
+//
+// ikm = HMAC-SHA256(key=SHA256(sshKeyBytes), msg=passphrase)
+// Final key: HKDF-SHA256(ikm, salt, info="picoclaw-credential-v1", 32 bytes)
+func deriveKey(passphrase string, salt []byte) ([]byte, error) {
+	sshBytes, err := SSHKeyProvider()
+	if err != nil {
+		return nil, err
+	}
+	return deriveKeyFromBytes(passphrase, sshBytes, salt)
+}
+
+// deriveKeyFromBytes derives a 32-byte AES-256 key from passphrase and SSH key bytes.
+func deriveKeyFromBytes(passphrase string, sshBytes, salt []byte) ([]byte, error) {
 	sshHash := sha256.Sum256(sshBytes)
 	mac := hmac.New(sha256.New, sshHash[:])
 	mac.Write([]byte(passphrase))
