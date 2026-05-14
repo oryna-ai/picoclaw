@@ -110,6 +110,10 @@ type Manager struct {
 	outboundHook  OutboundHook      // optional outbound message interceptor
 }
 
+type mediaStoreSetter interface {
+	SetMediaStore(s media.MediaStore)
+}
+
 // ManagerOption configures a channel Manager.
 type ManagerOption func(*Manager)
 
@@ -512,6 +516,22 @@ func NewManager(
 	return m, nil
 }
 
+// SetMediaStore updates the store used by the manager and every channel that
+// accepts media store injection. Gateway reload creates a fresh store, so
+// keeping existing channels on the same store as the agent is required for
+// inbound media refs to remain resolvable after reload.
+func (m *Manager) SetMediaStore(store media.MediaStore) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.mediaStore = store
+	for _, ch := range m.channels {
+		if setter, ok := ch.(mediaStoreSetter); ok {
+			setter.SetMediaStore(store)
+		}
+	}
+}
+
 // GetStreamer implements bus.StreamDelegate.
 // It checks if the named channel supports streaming and returns a Streamer.
 func (m *Manager) GetStreamer(ctx context.Context, channelName, chatID string) (bus.Streamer, bool) {
@@ -609,7 +629,7 @@ func (m *Manager) initChannel(typeName, channelName string) {
 	} else {
 		// Inject MediaStore if channel supports it
 		if m.mediaStore != nil {
-			if setter, ok := ch.(interface{ SetMediaStore(s media.MediaStore) }); ok {
+			if setter, ok := ch.(mediaStoreSetter); ok {
 				setter.SetMediaStore(m.mediaStore)
 			}
 		}
@@ -694,6 +714,8 @@ func (m *Manager) getChannelConfigAndEnabled(channelName string) (*config.Channe
 	case *config.MaixCamSettings:
 		return bc, true
 	case *config.TeamsWebhookSettings:
+		return bc, true
+	case *config.SlackWebhookSettings:
 		return bc, true
 	case *config.DiscordSettings:
 		return bc, settings.Token.String() != ""
