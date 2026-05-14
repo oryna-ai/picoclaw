@@ -204,12 +204,14 @@ func (r *ToolResultHookResponse) Clone() *ToolResultHookResponse {
 }
 
 // OutboundHookResponse is passed to MessageInterceptor.AfterOutbound.
+// For text messages, Message is populated; for media messages, MediaMessage is populated.
 type OutboundHookResponse struct {
-	Meta       HookMeta            `json:"meta"`
-	Context    *TurnContext        `json:"context,omitempty"`
-	Message    bus.OutboundMessage `json:"message"`
-	MessageIDs []string            `json:"message_ids,omitempty"`
-	Error      string              `json:"error,omitempty"`
+	Meta         HookMeta                  `json:"meta"`
+	Context      *TurnContext              `json:"context,omitempty"`
+	Message      bus.OutboundMessage       `json:"message,omitempty"`
+	MediaMessage *bus.OutboundMediaMessage `json:"media_message,omitempty"`
+	MessageIDs   []string                  `json:"message_ids,omitempty"`
+	Error        string                    `json:"error,omitempty"`
 }
 
 func (r *OutboundHookResponse) Clone() *OutboundHookResponse {
@@ -220,17 +222,21 @@ func (r *OutboundHookResponse) Clone() *OutboundHookResponse {
 	cloned.Meta = cloneHookMeta(r.Meta)
 	cloned.Context = cloneTurnContext(r.Context)
 	cloned.Message = cloneOutboundMessage(r.Message)
+	if r.MediaMessage != nil {
+		mm := *r.MediaMessage
+		cloned.MediaMessage = &mm
+	}
 	cloned.MessageIDs = append([]string(nil), r.MessageIDs...)
 	return &cloned
 }
 
 // InboundHookResponse is passed to MessageInterceptor.AfterInbound.
 type InboundHookResponse struct {
-	Meta     HookMeta          `json:"meta"`
-	Context  *TurnContext      `json:"context,omitempty"`
+	Meta     HookMeta           `json:"meta"`
+	Context  *TurnContext       `json:"context,omitempty"`
 	Message  bus.InboundMessage `json:"message"`
-	Response string            `json:"response,omitempty"`
-	Error    string            `json:"error,omitempty"`
+	Response string             `json:"response,omitempty"`
+	Error    string             `json:"error,omitempty"`
 }
 
 func (r *InboundHookResponse) Clone() *InboundHookResponse {

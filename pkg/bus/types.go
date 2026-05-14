@@ -100,6 +100,8 @@ type OutboundMediaMessage struct {
 	Context    InboundContext `json:"context"`
 	AgentID    string         `json:"agent_id,omitempty"`
 	SessionKey string         `json:"session_key,omitempty"`
+	TurnID     string         `json:"turn_id,omitempty"`
+	StateID    string         `json:"state_id,omitempty"`
 	Scope      *OutboundScope `json:"scope,omitempty"`
 	Parts      []MediaPart    `json:"parts"`
 }

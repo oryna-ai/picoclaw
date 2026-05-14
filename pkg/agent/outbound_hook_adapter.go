@@ -72,3 +72,40 @@ func (a *outboundHookAdapter) AfterOutbound(
 
 	a.hm.AfterOutbound(ctx, resp)
 }
+
+func (a *outboundHookAdapter) AfterOutboundMedia(
+	ctx context.Context,
+	name string,
+	msg *bus.OutboundMediaMessage,
+	msgIDs []string,
+	sendErr error,
+) {
+	if a == nil || a.hm == nil || msg == nil {
+		return
+	}
+
+	errStr := ""
+	if sendErr != nil {
+		errStr = sendErr.Error()
+	}
+
+	resp := &OutboundHookResponse{
+		Meta: HookMeta{
+			AgentID:    msg.AgentID,
+			TurnID:     msg.TurnID,
+			StateID:    msg.StateID,
+			SessionKey: msg.SessionKey,
+			Channel:    name,
+			ChatID:     msg.ChatID,
+			turnContext: &TurnContext{
+				Inbound: &msg.Context,
+			},
+		},
+		Context:      &TurnContext{Inbound: &msg.Context},
+		MediaMessage: msg,
+		MessageIDs:   msgIDs,
+		Error:        errStr,
+	}
+
+	a.hm.AfterOutbound(ctx, resp)
+}

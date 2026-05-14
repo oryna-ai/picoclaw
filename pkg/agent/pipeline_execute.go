@@ -142,6 +142,8 @@ toolLoop:
 							),
 							AgentID:    ts.agent.ID,
 							SessionKey: ts.sessionKey,
+							TurnID:     ts.turnID,
+							StateID:    ts.stateID,
 							Scope:      outboundScopeFromSessionScope(ts.opts.Dispatch.SessionScope),
 							Parts:      parts,
 						}
@@ -505,6 +507,8 @@ toolLoop:
 				),
 				AgentID:    ts.agent.ID,
 				SessionKey: ts.sessionKey,
+				TurnID:     ts.turnID,
+				StateID:    ts.stateID,
 				Scope:      outboundScopeFromSessionScope(ts.opts.Dispatch.SessionScope),
 				Parts:      parts,
 			}

@@ -87,6 +87,7 @@ type channelWorker struct {
 type OutboundHook interface {
 	BeforeOutbound(ctx context.Context, name string, msg *bus.OutboundMessage) (*bus.OutboundMessage, bool, error)
 	AfterOutbound(ctx context.Context, name string, msg *bus.OutboundMessage, msgIDs []string, sendErr error)
+	AfterOutboundMedia(ctx context.Context, name string, msg *bus.OutboundMediaMessage, msgIDs []string, sendErr error)
 }
 
 type Manager struct {
@@ -1379,6 +1380,10 @@ func (m *Manager) sendMediaWithRetry(
 		msgIDs, lastErr = ms.SendMedia(ctx, msg)
 		if lastErr == nil {
 			m.publishOutboundMediaSent(name, msg, msgIDs)
+			// AfterOutboundMedia hook: notify interceptor of successful send
+			if m.outboundHook != nil {
+				m.outboundHook.AfterOutboundMedia(ctx, name, &msg, msgIDs, nil)
+			}
 			return msgIDs, nil
 		}
 
@@ -1419,6 +1424,12 @@ func (m *Manager) sendMediaWithRetry(
 		"retries": maxRetries,
 	})
 	m.publishOutboundMediaFailed(name, msg, lastErr)
+
+	// AfterOutboundMedia hook: notify interceptor of failed send
+	if m.outboundHook != nil {
+		m.outboundHook.AfterOutboundMedia(ctx, name, &msg, nil, lastErr)
+	}
+
 	return nil, lastErr
 }
 
