@@ -110,6 +110,7 @@ func hookMetaFromRuntimeEvent(evt runtimeevents.Event) HookMeta {
 	meta := HookMeta{
 		AgentID:      evt.Scope.AgentID,
 		TurnID:       evt.Scope.TurnID,
+		StateID:      evt.Scope.StateID,
 		ParentTurnID: evt.Correlation.ParentTurnID,
 		SessionKey:   evt.Scope.SessionKey,
 		TracePath:    evt.Correlation.TraceID,
