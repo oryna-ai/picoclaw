@@ -24,7 +24,6 @@ func TestMCPRuntimeResetClearsState(t *testing.T) {
 	manager := mcp.NewManager()
 	rt.setManager(manager)
 	rt.setInitErr(errors.New("stale init error"))
-	rt.initOnce.Do(func() {})
 
 	got := rt.reset()
 	if got != manager {
@@ -37,10 +36,9 @@ func TestMCPRuntimeResetClearsState(t *testing.T) {
 		t.Fatalf("getInitErr() = %v, want nil", err)
 	}
 
-	reran := false
-	rt.initOnce.Do(func() { reran = true })
-	if !reran {
-		t.Fatal("expected initOnce to be reset")
+	// After reset, tryInit should return true because initDone=false.
+	if !rt.tryInit() {
+		t.Fatal("expected tryInit() to return true after reset")
 	}
 }
 
@@ -52,7 +50,6 @@ func TestReloadProviderAndConfig_ResetsMCPRuntime(t *testing.T) {
 	manager := mcp.NewManager()
 	al.mcp.setManager(manager)
 	al.mcp.setInitErr(errors.New("stale init error"))
-	al.mcp.initOnce.Do(func() {})
 
 	if !al.mcp.hasManager() {
 		t.Fatal("expected MCP manager to exist before reload")
@@ -69,10 +66,9 @@ func TestReloadProviderAndConfig_ResetsMCPRuntime(t *testing.T) {
 		t.Fatalf("getInitErr() = %v, want nil", err)
 	}
 
-	reran := false
-	al.mcp.initOnce.Do(func() { reran = true })
-	if !reran {
-		t.Fatal("expected MCP initOnce to be reset after reload")
+	// After reload, tryInit should return true because reset() cleared initDone.
+	if !al.mcp.tryInit() {
+		t.Fatal("expected tryInit() to return true after reload")
 	}
 }
 

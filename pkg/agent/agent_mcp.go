@@ -17,11 +17,16 @@ import (
 	"github.com/sipeed/picoclaw/pkg/tools"
 )
 
+// mcpRuntime manages the lifecycle of MCP server connections.
+// It uses a pointer (always allocated on heap) to avoid unsafe copying of
+// sync.Mutex when the parent AgentLoop struct is assigned.
+// IMPORTANT: mcpRuntime must always be used as a pointer (*mcpRuntime) to
+// prevent copying of the embedded sync.Mutex.
 type mcpRuntime struct {
-	initOnce sync.Once
 	mu       sync.Mutex
 	manager  *mcp.Manager
 	initErr  error
+	initDone bool // true after initialization completes (success or failure)
 }
 
 func (r *mcpRuntime) reset() *mcp.Manager {
@@ -29,7 +34,7 @@ func (r *mcpRuntime) reset() *mcp.Manager {
 	manager := r.manager
 	r.manager = nil
 	r.initErr = nil
-	r.initOnce = sync.Once{}
+	r.initDone = false
 	r.mu.Unlock()
 	return manager
 }
@@ -38,12 +43,14 @@ func (r *mcpRuntime) setManager(manager *mcp.Manager) {
 	r.mu.Lock()
 	r.manager = manager
 	r.initErr = nil
+	r.initDone = true
 	r.mu.Unlock()
 }
 
 func (r *mcpRuntime) setInitErr(err error) {
 	r.mu.Lock()
 	r.initErr = err
+	r.initDone = true
 	r.mu.Unlock()
 }
 
@@ -71,6 +78,21 @@ func (r *mcpRuntime) getManager() *mcp.Manager {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.manager
+}
+
+// tryInit attempts to initialize the MCP runtime exactly once.
+// Returns true if this call performed the initialization, false if
+// initialization was already done (by this or another goroutine).
+// The caller must check getInitErr() after a true return to see if
+// initialization succeeded.
+func (r *mcpRuntime) tryInit() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.initDone {
+		return false
+	}
+	r.initDone = true // mark as done before releasing the lock
+	return true
 }
 
 // ensureMCPInitialized loads MCP servers/tools once so both Run() and direct
@@ -106,165 +128,170 @@ func (al *AgentLoop) ensureMCPInitialized(ctx context.Context) error {
 		return nil
 	}
 
-	al.mcp.initOnce.Do(func() {
-		mcpManager := mcp.NewManager(mcp.WithRuntimeEvents(al.runtimeEvents))
+	// tryInit atomically checks and marks initialization as started.
+	// Only the first caller proceeds with initialization; subsequent
+	// callers see the cached result via getInitErr().
+	if !al.mcp.tryInit() {
+		return al.mcp.getInitErr()
+	}
 
-		defaultAgent := al.registry.GetDefaultAgent()
-		workspacePath := al.cfg.WorkspacePath()
-		if defaultAgent != nil && defaultAgent.Workspace != "" {
-			workspacePath = defaultAgent.Workspace
+	mcpManager := mcp.NewManager(mcp.WithRuntimeEvents(al.runtimeEvents))
+
+	defaultAgent := al.registry.GetDefaultAgent()
+	workspacePath := al.cfg.WorkspacePath()
+	if defaultAgent != nil && defaultAgent.Workspace != "" {
+		workspacePath = defaultAgent.Workspace
+	}
+
+	if err := mcpManager.LoadFromMCPConfig(ctx, mcpCfg, workspacePath); err != nil {
+		al.mcp.setInitErr(fmt.Errorf("failed to load MCP servers: %w", err))
+		logger.WarnCF("agent", "Failed to load MCP servers, MCP tools will not be available",
+			map[string]any{
+				"error": err.Error(),
+			})
+		if closeErr := mcpManager.Close(); closeErr != nil {
+			logger.ErrorCF("agent", "Failed to close MCP manager",
+				map[string]any{
+					"error": closeErr.Error(),
+				})
+		}
+		return al.mcp.getInitErr()
+	}
+
+	// Register MCP tools for all agents
+	servers := mcpManager.GetServers()
+	uniqueTools := 0
+	totalRegistrations := 0
+	agentIDs := al.registry.ListAgentIDs()
+	agentCount := len(agentIDs)
+
+	for serverName, conn := range servers {
+		uniqueTools += len(conn.Tools)
+
+		// Determine whether this server's tools should be deferred (hidden).
+		// Per-server "deferred" field takes precedence over the global Discovery.Enabled.
+		serverCfg := mcpCfg.Servers[serverName]
+		registerAsHidden := serverIsDeferred(al.cfg.Tools.MCP.Discovery.Enabled, serverCfg)
+		registeredToolsByAgent := make(map[string]map[string]struct{}, len(agentIDs))
+
+		for _, tool := range conn.Tools {
+			for _, agentID := range agentIDs {
+				agent, ok := al.registry.GetAgent(agentID)
+				if !ok {
+					continue
+				}
+				if !agent.AllowsMCPServer(serverName) {
+					logger.DebugCF("agent", "Skipped MCP tool registration by agent mcpServers allowlist",
+						map[string]any{
+							"agent_id": agentID,
+							"server":   serverName,
+							"tool":     tool.Name,
+						})
+					continue
+				}
+
+				mcpTool := tools.NewMCPTool(mcpManager, serverName, tool)
+				toolName := mcpTool.Name()
+				mcpTool.SetWorkspace(agent.Workspace)
+				mcpTool.SetMaxInlineTextRunes(al.cfg.Tools.MCP.GetMaxInlineTextChars())
+				mcpTool.SetEventPublisher(al.runtimeEvents)
+
+				if registerAsHidden {
+					agent.Tools.RegisterHidden(mcpTool)
+				} else {
+					agent.Tools.Register(mcpTool)
+				}
+				if !toolRegistryIncludes(agent.Tools, toolName) {
+					continue
+				}
+
+				recordRegisteredMCPTool(registeredToolsByAgent, agentID, toolName)
+				totalRegistrations++
+				logger.DebugCF("agent", "Registered MCP tool",
+					map[string]any{
+						"agent_id": agentID,
+						"server":   serverName,
+						"tool":     tool.Name,
+						"name":     toolName,
+						"deferred": registerAsHidden,
+					})
+			}
 		}
 
-		if err := mcpManager.LoadFromMCPConfig(ctx, mcpCfg, workspacePath); err != nil {
-			al.mcp.setInitErr(fmt.Errorf("failed to load MCP servers: %w", err))
-			logger.WarnCF("agent", "Failed to load MCP servers, MCP tools will not be available",
-				map[string]any{
-					"error": err.Error(),
-				})
+		for _, agentID := range agentIDs {
+			agent, ok := al.registry.GetAgent(agentID)
+			if !ok {
+				continue
+			}
+			registerMCPServerPromptContributor(
+				agentID,
+				agent,
+				serverName,
+				len(registeredToolsByAgent[agentID]),
+				registerAsHidden,
+			)
+		}
+	}
+	logger.InfoCF("agent", "MCP tools registered successfully",
+		map[string]any{
+			"server_count":        len(servers),
+			"unique_tools":        uniqueTools,
+			"total_registrations": totalRegistrations,
+			"agent_count":         agentCount,
+		})
+
+	// Initializes Discovery Tools only if enabled by configuration
+	if al.cfg.Tools.MCP.Enabled && al.cfg.Tools.MCP.Discovery.Enabled {
+		useBM25 := al.cfg.Tools.MCP.Discovery.UseBM25
+		useRegex := al.cfg.Tools.MCP.Discovery.UseRegex
+
+		// Fail fast: If discovery is enabled but no search method is turned on
+		if !useBM25 && !useRegex {
+			al.mcp.setInitErr(fmt.Errorf(
+				"tool discovery is enabled but neither 'use_bm25' nor 'use_regex' is set to true in the configuration",
+			))
 			if closeErr := mcpManager.Close(); closeErr != nil {
 				logger.ErrorCF("agent", "Failed to close MCP manager",
 					map[string]any{
 						"error": closeErr.Error(),
 					})
 			}
-			return
+			return al.mcp.getInitErr()
 		}
 
-		// Register MCP tools for all agents
-		servers := mcpManager.GetServers()
-		uniqueTools := 0
-		totalRegistrations := 0
-		agentIDs := al.registry.ListAgentIDs()
-		agentCount := len(agentIDs)
-
-		for serverName, conn := range servers {
-			uniqueTools += len(conn.Tools)
-
-			// Determine whether this server's tools should be deferred (hidden).
-			// Per-server "deferred" field takes precedence over the global Discovery.Enabled.
-			serverCfg := mcpCfg.Servers[serverName]
-			registerAsHidden := serverIsDeferred(al.cfg.Tools.MCP.Discovery.Enabled, serverCfg)
-			registeredToolsByAgent := make(map[string]map[string]struct{}, len(agentIDs))
-
-			for _, tool := range conn.Tools {
-				for _, agentID := range agentIDs {
-					agent, ok := al.registry.GetAgent(agentID)
-					if !ok {
-						continue
-					}
-					if !agent.AllowsMCPServer(serverName) {
-						logger.DebugCF("agent", "Skipped MCP tool registration by agent mcpServers allowlist",
-							map[string]any{
-								"agent_id": agentID,
-								"server":   serverName,
-								"tool":     tool.Name,
-							})
-						continue
-					}
-
-					mcpTool := tools.NewMCPTool(mcpManager, serverName, tool)
-					toolName := mcpTool.Name()
-					mcpTool.SetWorkspace(agent.Workspace)
-					mcpTool.SetMaxInlineTextRunes(al.cfg.Tools.MCP.GetMaxInlineTextChars())
-					mcpTool.SetEventPublisher(al.runtimeEvents)
-
-					if registerAsHidden {
-						agent.Tools.RegisterHidden(mcpTool)
-					} else {
-						agent.Tools.Register(mcpTool)
-					}
-					if !toolRegistryIncludes(agent.Tools, toolName) {
-						continue
-					}
-
-					recordRegisteredMCPTool(registeredToolsByAgent, agentID, toolName)
-					totalRegistrations++
-					logger.DebugCF("agent", "Registered MCP tool",
-						map[string]any{
-							"agent_id": agentID,
-							"server":   serverName,
-							"tool":     tool.Name,
-							"name":     toolName,
-							"deferred": registerAsHidden,
-						})
-				}
-			}
-
-			for _, agentID := range agentIDs {
-				agent, ok := al.registry.GetAgent(agentID)
-				if !ok {
-					continue
-				}
-				registerMCPServerPromptContributor(
-					agentID,
-					agent,
-					serverName,
-					len(registeredToolsByAgent[agentID]),
-					registerAsHidden,
-				)
-			}
-		}
-		logger.InfoCF("agent", "MCP tools registered successfully",
-			map[string]any{
-				"server_count":        len(servers),
-				"unique_tools":        uniqueTools,
-				"total_registrations": totalRegistrations,
-				"agent_count":         agentCount,
-			})
-
-		// Initializes Discovery Tools only if enabled by configuration
-		if al.cfg.Tools.MCP.Enabled && al.cfg.Tools.MCP.Discovery.Enabled {
-			useBM25 := al.cfg.Tools.MCP.Discovery.UseBM25
-			useRegex := al.cfg.Tools.MCP.Discovery.UseRegex
-
-			// Fail fast: If discovery is enabled but no search method is turned on
-			if !useBM25 && !useRegex {
-				al.mcp.setInitErr(fmt.Errorf(
-					"tool discovery is enabled but neither 'use_bm25' nor 'use_regex' is set to true in the configuration",
-				))
-				if closeErr := mcpManager.Close(); closeErr != nil {
-					logger.ErrorCF("agent", "Failed to close MCP manager",
-						map[string]any{
-							"error": closeErr.Error(),
-						})
-				}
-				return
-			}
-
-			ttl := al.cfg.Tools.MCP.Discovery.TTL
-			if ttl <= 0 {
-				ttl = 5 // Default value
-			}
-
-			maxSearchResults := al.cfg.Tools.MCP.Discovery.MaxSearchResults
-			if maxSearchResults <= 0 {
-				maxSearchResults = 5 // Default value
-			}
-
-			logger.InfoCF("agent", "Initializing tool discovery", map[string]any{
-				"bm25": useBM25, "regex": useRegex, "ttl": ttl, "max_results": maxSearchResults,
-			})
-
-			for _, agentID := range agentIDs {
-				agent, ok := al.registry.GetAgent(agentID)
-				if !ok {
-					continue
-				}
-				if !agentHasDiscoverableMCPServers(al.cfg, agent.MCPServerAllowlist) {
-					continue
-				}
-
-				if useRegex {
-					agent.Tools.Register(tools.NewRegexSearchTool(agent.Tools, ttl, maxSearchResults))
-				}
-				if useBM25 {
-					agent.Tools.Register(tools.NewBM25SearchTool(agent.Tools, ttl, maxSearchResults))
-				}
-			}
+		ttl := al.cfg.Tools.MCP.Discovery.TTL
+		if ttl <= 0 {
+			ttl = 5 // Default value
 		}
 
-		al.mcp.setManager(mcpManager)
-	})
+		maxSearchResults := al.cfg.Tools.MCP.Discovery.MaxSearchResults
+		if maxSearchResults <= 0 {
+			maxSearchResults = 5 // Default value
+		}
+
+		logger.InfoCF("agent", "Initializing tool discovery", map[string]any{
+			"bm25": useBM25, "regex": useRegex, "ttl": ttl, "max_results": maxSearchResults,
+		})
+
+		for _, agentID := range agentIDs {
+			agent, ok := al.registry.GetAgent(agentID)
+			if !ok {
+				continue
+			}
+			if !agentHasDiscoverableMCPServers(al.cfg, agent.MCPServerAllowlist) {
+				continue
+			}
+
+			if useRegex {
+				agent.Tools.Register(tools.NewRegexSearchTool(agent.Tools, ttl, maxSearchResults))
+			}
+			if useBM25 {
+				agent.Tools.Register(tools.NewBM25SearchTool(agent.Tools, ttl, maxSearchResults))
+			}
+		}
+	}
+
+	al.mcp.setManager(mcpManager)
 
 	return al.mcp.getInitErr()
 }

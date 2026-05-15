@@ -145,7 +145,12 @@ func (al *AgentLoop) Run(ctx context.Context) error {
 		return err
 	}
 	if err := al.ensureMCPInitialized(ctx); err != nil {
-		return err
+		// MCP initialization failure should not prevent the agent from running.
+		// The agent will continue without MCP tools, which is a graceful degradation.
+		logger.WarnCF("agent", "MCP initialization failed, continuing without MCP tools",
+			map[string]any{
+				"error": err.Error(),
+			})
 	}
 
 	idleTicker := time.NewTicker(100 * time.Millisecond)
