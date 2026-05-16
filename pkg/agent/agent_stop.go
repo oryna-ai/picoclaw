@@ -106,6 +106,30 @@ func (al *AgentLoop) takePendingStop(sessionKey string) bool {
 	return ok
 }
 
+// HardAbortByScope finds any active turn matching the given channel and chatID
+// and immediately aborts it. This bypasses the message bus and can interrupt
+// in-progress LLM calls or tool executions.
+func (al *AgentLoop) HardAbortByScope(channel, chatID string) error {
+	var foundKey string
+	var seenCount int
+	al.activeTurnStates.Range(func(key, value any) bool {
+		seenCount++
+		ts, ok := value.(*turnState)
+		if !ok {
+			return true // skip placeholder strings
+		}
+		if ts.channel == channel && ts.chatID == chatID {
+			foundKey = key.(string)
+			return false
+		}
+		return true
+	})
+	if foundKey == "" {
+		return fmt.Errorf("no active turn found for channel=%s chatID=%s (scanned %d entries)", channel, chatID, seenCount)
+	}
+	return al.HardAbort(foundKey)
+}
+
 func (al *AgentLoop) resetMessageToolRound(sessionKey string) {
 	if strings.TrimSpace(sessionKey) == "" {
 		return
