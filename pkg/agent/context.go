@@ -223,6 +223,15 @@ func (cb *ContextBuilder) BuildSystemPromptParts() []PromptPart {
 		})
 	}
 
+	// Add contributed parts that override defaults (e.g. kernel/identity,
+	// instruction/workspace). These were collected above for override detection
+	// and must be added to the stack so they end up in the static prompt.
+	for _, part := range contributed {
+		if part.Layer == PromptLayerKernel || part.Layer == PromptLayerInstruction {
+			add(part)
+		}
+	}
+
 	// Bootstrap files — skipped when a contributor provides instruction/workspace
 	if !hasInstructionWorkspace {
 		bootstrapContent := cb.LoadBootstrapFiles()
