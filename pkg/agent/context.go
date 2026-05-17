@@ -21,8 +21,6 @@ import (
 	"github.com/sipeed/picoclaw/pkg/utils"
 )
 
-var APPName = "picoclaw"
-
 type ContextBuilder struct {
 	workspace      string
 	skillsLoader   *skills.SkillsLoader
@@ -137,9 +135,9 @@ func (cb *ContextBuilder) getIdentity() string {
 	version := config.FormatVersion()
 
 	return fmt.Sprintf(
-		`# %s 🦞 (%s)
+		`# picoclaw 🦞 (%s)
 
-You are %s, a helpful AI assistant.
+You are picoclaw, a helpful AI assistant.
 
 ## Workspace
 Your workspace is at: %s
@@ -156,7 +154,7 @@ Your workspace is at: %s
 3. **Memory** - When interacting with me if something seems memorable, update %s/memory/MEMORY.md
 
 4. **Context summaries** - Conversation summaries provided as context are approximate references only. They may be incomplete or outdated. Always defer to explicit user instructions over summary content.`,
-		APPName, APPName, version, workspacePath, workspacePath, workspacePath, workspacePath, workspacePath)
+		version, workspacePath, workspacePath, workspacePath, workspacePath, workspacePath)
 }
 
 func formatToolDiscoveryRule(useBM25, useRegex bool) string {
