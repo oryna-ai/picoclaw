@@ -60,7 +60,7 @@ type cachedMessage struct {
 }
 
 func NewFeishuChannel(bc *config.Channel, cfg *config.FeishuSettings, bus *bus.MessageBus) (*FeishuChannel, error) {
-	base := channels.NewBaseChannel("feishu", cfg, bus, bc.AllowFrom,
+	base := channels.NewBaseChannel(bc.Name(), cfg, bus, bc.AllowFrom,
 		channels.WithGroupTrigger(bc.GroupTrigger),
 		channels.WithReasoningChannelID(bc.ReasoningChannelID),
 	)
@@ -182,10 +182,11 @@ func (c *FeishuChannel) Send(ctx context.Context, msg bus.OutboundMessage) ([]st
 	if isToolFeedback {
 		sendContent = channels.InitialAnimatedToolFeedbackContent(msg.Content)
 	}
+	replyToID := msg.ReplyToMessageID
 	cardContent, err := buildMarkdownCard(sendContent)
 	if err != nil {
 		// If card build fails, fall back to plain text
-		msgID, sendErr := c.sendText(ctx, msg.ChatID, sendContent)
+		msgID, sendErr := c.sendText(ctx, msg.ChatID, sendContent, replyToID)
 		if sendErr != nil {
 			return nil, sendErr
 		}
@@ -198,7 +199,7 @@ func (c *FeishuChannel) Send(ctx context.Context, msg bus.OutboundMessage) ([]st
 	}
 
 	// First attempt: try sending as interactive card
-	msgID, err := c.sendCard(ctx, msg.ChatID, cardContent)
+	msgID, err := c.sendCard(ctx, msg.ChatID, cardContent, replyToID)
 	if err == nil {
 		if isToolFeedback {
 			c.RecordToolFeedbackMessage(msg.ChatID, msgID, msg.Content)
@@ -220,7 +221,7 @@ func (c *FeishuChannel) Send(ctx context.Context, msg bus.OutboundMessage) ([]st
 		})
 
 		// Second attempt: fall back to plain text message
-		msgID, textErr := c.sendText(ctx, msg.ChatID, sendContent)
+		msgID, textErr := c.sendText(ctx, msg.ChatID, sendContent, replyToID)
 		if textErr == nil {
 			if isToolFeedback {
 				c.RecordToolFeedbackMessage(msg.ChatID, msgID, msg.Content)
@@ -664,14 +665,17 @@ func (c *FeishuChannel) handleMessageReceive(ctx context.Context, event *larkim.
 		"thread_id":  stringValue(message.ThreadId),
 	})
 
+	replyToMessageID := replyTargetID(message)
+
 	inboundCtx := bus.InboundContext{
-		Channel:   c.Name(),
-		ChatID:    chatID,
-		ChatType:  inboundChatType,
-		SenderID:  senderID,
-		MessageID: messageID,
-		Mentioned: isMentioned,
-		Raw:       metadata,
+		Channel:          c.Name(),
+		ChatID:           chatID,
+		ChatType:         inboundChatType,
+		SenderID:         senderID,
+		MessageID:        messageID,
+		Mentioned:        isMentioned,
+		ReplyToMessageID: replyToMessageID,
+		Raw:              metadata,
 	}
 	if sender != nil && sender.TenantKey != nil && *sender.TenantKey != "" {
 		inboundCtx.SpaceType = "tenant"
@@ -1045,7 +1049,12 @@ func appendMediaTags(content, messageType string, mediaRefs []string) string {
 }
 
 // sendCard sends an interactive card message to a chat.
-func (c *FeishuChannel) sendCard(ctx context.Context, chatID, cardContent string) (string, error) {
+// If replyToID is non-empty, the message is sent as a reply to that message.
+func (c *FeishuChannel) sendCard(ctx context.Context, chatID, cardContent, replyToID string) (string, error) {
+	if replyToID != "" {
+		return c.sendCardReply(ctx, replyToID, cardContent)
+	}
+
 	req := larkim.NewCreateMessageReqBuilder().
 		ReceiveIdType(larkim.ReceiveIdTypeChatId).
 		Body(larkim.NewCreateMessageReqBodyBuilder().
@@ -1075,9 +1084,44 @@ func (c *FeishuChannel) sendCard(ctx context.Context, chatID, cardContent string
 	return "", nil
 }
 
+// sendCardReply sends an interactive card as a reply to a specific message.
+func (c *FeishuChannel) sendCardReply(ctx context.Context, messageID, cardContent string) (string, error) {
+	req := larkim.NewReplyMessageReqBuilder().
+		MessageId(messageID).
+		Body(larkim.NewReplyMessageReqBodyBuilder().
+			Content(cardContent).
+			MsgType(larkim.MsgTypeInteractive).
+			Build()).
+		Build()
+
+	resp, err := c.client.Im.V1.Message.Reply(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("feishu reply card: %w", channels.ErrTemporary)
+	}
+
+	if !resp.Success() {
+		c.invalidateTokenOnAuthError(resp.Code)
+		return "", fmt.Errorf("feishu reply api error (code=%d msg=%s): %w", resp.Code, resp.Msg, channels.ErrTemporary)
+	}
+
+	logger.DebugCF("feishu", "Feishu card reply sent", map[string]any{
+		"reply_to": messageID,
+	})
+
+	if resp.Data != nil && resp.Data.MessageId != nil {
+		return *resp.Data.MessageId, nil
+	}
+	return "", nil
+}
+
 // sendText sends a plain text message to a chat (fallback when card fails).
-func (c *FeishuChannel) sendText(ctx context.Context, chatID, text string) (string, error) {
+// If replyToID is non-empty, the message is sent as a reply to that message.
+func (c *FeishuChannel) sendText(ctx context.Context, chatID, text, replyToID string) (string, error) {
 	content, _ := json.Marshal(map[string]string{"text": text})
+
+	if replyToID != "" {
+		return c.sendTextReply(ctx, replyToID, string(content))
+	}
 
 	req := larkim.NewCreateMessageReqBuilder().
 		ReceiveIdType(larkim.ReceiveIdTypeChatId).
@@ -1099,6 +1143,36 @@ func (c *FeishuChannel) sendText(ctx context.Context, chatID, text string) (stri
 
 	logger.DebugCF("feishu", "Feishu text message sent (fallback)", map[string]any{
 		"chat_id": chatID,
+	})
+
+	if resp.Data != nil && resp.Data.MessageId != nil {
+		return *resp.Data.MessageId, nil
+	}
+	return "", nil
+}
+
+// sendTextReply sends a plain text message as a reply to a specific message.
+func (c *FeishuChannel) sendTextReply(ctx context.Context, messageID, textContent string) (string, error) {
+	req := larkim.NewReplyMessageReqBuilder().
+		MessageId(messageID).
+		Body(larkim.NewReplyMessageReqBodyBuilder().
+			Content(textContent).
+			MsgType(larkim.MsgTypeText).
+			Build()).
+		Build()
+
+	resp, err := c.client.Im.V1.Message.Reply(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("feishu reply text: %w", channels.ErrTemporary)
+	}
+
+	if !resp.Success() {
+		c.invalidateTokenOnAuthError(resp.Code)
+		return "", fmt.Errorf("feishu reply text api error (code=%d msg=%s): %w", resp.Code, resp.Msg, channels.ErrTemporary)
+	}
+
+	logger.DebugCF("feishu", "Feishu text reply sent", map[string]any{
+		"reply_to": messageID,
 	})
 
 	if resp.Data != nil && resp.Data.MessageId != nil {
