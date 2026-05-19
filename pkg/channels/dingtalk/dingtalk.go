@@ -48,7 +48,7 @@ func NewDingTalkChannel(
 	// Set the logger for the Stream SDK
 	dinglog.SetLogger(logger.NewLogger("dingtalk"))
 
-	base := channels.NewBaseChannel("dingtalk", cfg, messageBus, bc.AllowFrom,
+	base := channels.NewBaseChannel(bc.Name(), cfg, messageBus, bc.AllowFrom,
 		channels.WithMaxMessageLength(20000),
 		channels.WithGroupTrigger(bc.GroupTrigger),
 		channels.WithReasoningChannelID(bc.ReasoningChannelID),
@@ -258,7 +258,7 @@ func (c *DingTalkChannel) SendDirectReply(ctx context.Context, sessionWebhook, c
 
 	// Convert string content to []byte for the API
 	contentBytes := []byte(content)
-	titleBytes := []byte("PicoClaw")
+	titleBytes := []byte("LaiyouAI")
 
 	// Send markdown formatted reply
 	err := replier.SimpleReplyMarkdown(
