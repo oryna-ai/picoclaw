@@ -143,4 +143,4 @@ require (
 
 replace github.com/bwmarrin/discordgo => github.com/yeongaori/discordgo-fork v0.0.0-20260319072544-e8e546f5d532
 
-replace github.com/open-dingtalk/dingtalk-stream-sdk-go v0.9.1 => ./pkg/channels/dingtalk/sdk
+replace github.com/open-dingtalk/dingtalk-stream-sdk-go v0.9.1 => github.com/oryna-ai/dingtalk-stream-sdk-go v0.9.1

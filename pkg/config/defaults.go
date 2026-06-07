@@ -444,8 +444,14 @@ func DefaultConfig() *Config {
 			ListDir: ToolConfig{
 				Enabled: true,
 			},
-			Message: ToolConfig{
+			LoadImage: ToolConfig{
 				Enabled: true,
+			},
+			Message: MessageToolsConfig{
+				ToolConfig: ToolConfig{
+					Enabled: true,
+				},
+				MediaEnabled: false,
 			},
 			ReadFile: ReadFileToolConfig{
 				Enabled:         true,
