@@ -3,7 +3,7 @@ package oauthprovider
 import (
 	"context"
 
-	"github.com/sipeed/picoclaw/pkg/providers/protocoltypes"
+	"github.com/oryna-ai/picoclaw/pkg/providers/protocoltypes"
 )
 
 type (

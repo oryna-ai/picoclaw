@@ -14,10 +14,10 @@ import (
 
 	"github.com/caarlos0/env/v11"
 
-	"github.com/sipeed/picoclaw/pkg"
-	"github.com/sipeed/picoclaw/pkg/fileutil"
-	"github.com/sipeed/picoclaw/pkg/logger"
-	providercommon "github.com/sipeed/picoclaw/pkg/providers/common"
+	"github.com/oryna-ai/picoclaw/pkg"
+	"github.com/oryna-ai/picoclaw/pkg/fileutil"
+	"github.com/oryna-ai/picoclaw/pkg/logger"
+	providercommon "github.com/oryna-ai/picoclaw/pkg/providers/common"
 )
 
 // rrCounter is a global counter for round-robin load balancing across models.

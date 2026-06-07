@@ -12,11 +12,11 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"github.com/sipeed/picoclaw/pkg/bus"
-	"github.com/sipeed/picoclaw/pkg/config"
-	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
-	"github.com/sipeed/picoclaw/pkg/media"
-	"github.com/sipeed/picoclaw/pkg/utils"
+	"github.com/oryna-ai/picoclaw/pkg/bus"
+	"github.com/oryna-ai/picoclaw/pkg/config"
+	runtimeevents "github.com/oryna-ai/picoclaw/pkg/events"
+	"github.com/oryna-ai/picoclaw/pkg/media"
+	"github.com/oryna-ai/picoclaw/pkg/utils"
 )
 
 // mockChannel is a test double that delegates Send to a configurable function.

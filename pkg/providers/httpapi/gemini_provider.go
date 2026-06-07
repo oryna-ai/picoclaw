@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/providers/common"
+	"github.com/oryna-ai/picoclaw/pkg/providers/common"
 )
 
 const (

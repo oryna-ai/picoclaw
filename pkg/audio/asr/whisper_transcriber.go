@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/config"
-	"github.com/sipeed/picoclaw/pkg/logger"
-	"github.com/sipeed/picoclaw/pkg/providers"
-	"github.com/sipeed/picoclaw/pkg/utils"
+	"github.com/oryna-ai/picoclaw/pkg/config"
+	"github.com/oryna-ai/picoclaw/pkg/logger"
+	"github.com/oryna-ai/picoclaw/pkg/providers"
+	"github.com/oryna-ai/picoclaw/pkg/utils"
 )
 
 type WhisperTranscriber struct {

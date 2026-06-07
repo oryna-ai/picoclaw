@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/auth"
-	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/oryna-ai/picoclaw/pkg/auth"
+	"github.com/oryna-ai/picoclaw/pkg/config"
 )
 
 func TestExtractProtocol(t *testing.T) {

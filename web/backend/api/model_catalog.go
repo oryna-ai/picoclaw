@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/config"
-	"github.com/sipeed/picoclaw/pkg/fileutil"
+	"github.com/oryna-ai/picoclaw/pkg/config"
+	"github.com/oryna-ai/picoclaw/pkg/fileutil"
 )
 
 // CatalogModel represents a single model entry in a saved catalog.

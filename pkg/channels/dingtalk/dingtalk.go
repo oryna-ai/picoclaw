@@ -13,12 +13,12 @@ import (
 	"github.com/open-dingtalk/dingtalk-stream-sdk-go/client"
 	dinglog "github.com/open-dingtalk/dingtalk-stream-sdk-go/logger"
 
-	"github.com/sipeed/picoclaw/pkg/bus"
-	"github.com/sipeed/picoclaw/pkg/channels"
-	"github.com/sipeed/picoclaw/pkg/config"
-	"github.com/sipeed/picoclaw/pkg/identity"
-	"github.com/sipeed/picoclaw/pkg/logger"
-	"github.com/sipeed/picoclaw/pkg/utils"
+	"github.com/oryna-ai/picoclaw/pkg/bus"
+	"github.com/oryna-ai/picoclaw/pkg/channels"
+	"github.com/oryna-ai/picoclaw/pkg/config"
+	"github.com/oryna-ai/picoclaw/pkg/identity"
+	"github.com/oryna-ai/picoclaw/pkg/logger"
+	"github.com/oryna-ai/picoclaw/pkg/utils"
 )
 
 // DingTalkChannel implements the Channel interface for DingTalk (钉钉)

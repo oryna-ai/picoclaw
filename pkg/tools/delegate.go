@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sipeed/picoclaw/pkg/routing"
+	"github.com/oryna-ai/picoclaw/pkg/routing"
 )
 
 // DelegateTool delegates a task to a specific named agent and waits for

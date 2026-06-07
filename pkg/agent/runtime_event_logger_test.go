@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/bus"
-	"github.com/sipeed/picoclaw/pkg/config"
-	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
+	"github.com/oryna-ai/picoclaw/pkg/bus"
+	"github.com/oryna-ai/picoclaw/pkg/config"
+	runtimeevents "github.com/oryna-ai/picoclaw/pkg/events"
 )
 
 func TestRuntimeEventLoggerFiltering(t *testing.T) {

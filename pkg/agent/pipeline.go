@@ -3,10 +3,10 @@
 package agent
 
 import (
-	"github.com/sipeed/picoclaw/pkg/agent/interfaces"
-	"github.com/sipeed/picoclaw/pkg/config"
-	"github.com/sipeed/picoclaw/pkg/media"
-	"github.com/sipeed/picoclaw/pkg/providers"
+	"github.com/oryna-ai/picoclaw/pkg/agent/interfaces"
+	"github.com/oryna-ai/picoclaw/pkg/config"
+	"github.com/oryna-ai/picoclaw/pkg/media"
+	"github.com/oryna-ai/picoclaw/pkg/providers"
 )
 
 // Pipeline holds the runtime dependencies used by Pipeline methods.

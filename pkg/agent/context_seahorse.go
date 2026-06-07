@@ -7,12 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/sipeed/picoclaw/pkg/logger"
-	"github.com/sipeed/picoclaw/pkg/providers"
-	"github.com/sipeed/picoclaw/pkg/providers/protocoltypes"
-	"github.com/sipeed/picoclaw/pkg/seahorse"
-	"github.com/sipeed/picoclaw/pkg/session"
-	"github.com/sipeed/picoclaw/pkg/tokenizer"
+	"github.com/oryna-ai/picoclaw/pkg/logger"
+	"github.com/oryna-ai/picoclaw/pkg/providers"
+	"github.com/oryna-ai/picoclaw/pkg/providers/protocoltypes"
+	"github.com/oryna-ai/picoclaw/pkg/seahorse"
+	"github.com/oryna-ai/picoclaw/pkg/session"
+	"github.com/oryna-ai/picoclaw/pkg/tokenizer"
 )
 
 // seahorseContextManager adapts seahorse.Engine to agent.ContextManager.

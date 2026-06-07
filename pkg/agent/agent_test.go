@@ -16,16 +16,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/bus"
-	"github.com/sipeed/picoclaw/pkg/channels"
-	"github.com/sipeed/picoclaw/pkg/config"
-	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
-	"github.com/sipeed/picoclaw/pkg/media"
-	"github.com/sipeed/picoclaw/pkg/providers"
-	"github.com/sipeed/picoclaw/pkg/routing"
-	"github.com/sipeed/picoclaw/pkg/session"
-	"github.com/sipeed/picoclaw/pkg/tools"
-	"github.com/sipeed/picoclaw/pkg/utils"
+	"github.com/oryna-ai/picoclaw/pkg/bus"
+	"github.com/oryna-ai/picoclaw/pkg/channels"
+	"github.com/oryna-ai/picoclaw/pkg/config"
+	runtimeevents "github.com/oryna-ai/picoclaw/pkg/events"
+	"github.com/oryna-ai/picoclaw/pkg/media"
+	"github.com/oryna-ai/picoclaw/pkg/providers"
+	"github.com/oryna-ai/picoclaw/pkg/routing"
+	"github.com/oryna-ai/picoclaw/pkg/session"
+	"github.com/oryna-ai/picoclaw/pkg/tools"
+	"github.com/oryna-ai/picoclaw/pkg/utils"
 )
 
 type fakeChannel struct{ id string }

@@ -15,10 +15,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/auth"
-	"github.com/sipeed/picoclaw/pkg/config"
-	ppid "github.com/sipeed/picoclaw/pkg/pid"
-	"github.com/sipeed/picoclaw/web/backend/utils"
+	"github.com/oryna-ai/picoclaw/pkg/auth"
+	"github.com/oryna-ai/picoclaw/pkg/config"
+	ppid "github.com/oryna-ai/picoclaw/pkg/pid"
+	"github.com/oryna-ai/picoclaw/web/backend/utils"
 )
 
 func startLongRunningProcess(t *testing.T) *exec.Cmd {

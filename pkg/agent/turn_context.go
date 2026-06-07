@@ -1,9 +1,9 @@
 package agent
 
 import (
-	"github.com/sipeed/picoclaw/pkg/bus"
-	"github.com/sipeed/picoclaw/pkg/routing"
-	"github.com/sipeed/picoclaw/pkg/session"
+	"github.com/oryna-ai/picoclaw/pkg/bus"
+	"github.com/oryna-ai/picoclaw/pkg/routing"
+	"github.com/oryna-ai/picoclaw/pkg/session"
 )
 
 // TurnContext carries normalized turn-scoped facts that can be shared across

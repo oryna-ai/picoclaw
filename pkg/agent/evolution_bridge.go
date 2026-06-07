@@ -8,11 +8,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/config"
-	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
-	"github.com/sipeed/picoclaw/pkg/evolution"
-	"github.com/sipeed/picoclaw/pkg/logger"
-	"github.com/sipeed/picoclaw/pkg/providers"
+	"github.com/oryna-ai/picoclaw/pkg/config"
+	runtimeevents "github.com/oryna-ai/picoclaw/pkg/events"
+	"github.com/oryna-ai/picoclaw/pkg/evolution"
+	"github.com/oryna-ai/picoclaw/pkg/logger"
+	"github.com/oryna-ai/picoclaw/pkg/providers"
 )
 
 type evolutionBridge struct {

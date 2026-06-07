@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/bwmarrin/snowflake"
-	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
+	runtimeevents "github.com/oryna-ai/picoclaw/pkg/events"
 )
 
 var _node, _ = snowflake.NewNode(32)

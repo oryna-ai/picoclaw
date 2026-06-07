@@ -5,8 +5,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/sipeed/picoclaw/pkg/bus"
-	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
+	"github.com/oryna-ai/picoclaw/pkg/bus"
+	runtimeevents "github.com/oryna-ai/picoclaw/pkg/events"
 )
 
 const defaultEventSubscriberBuffer = 16

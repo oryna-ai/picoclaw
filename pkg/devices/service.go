@@ -6,12 +6,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/bus"
-	"github.com/sipeed/picoclaw/pkg/constants"
-	"github.com/sipeed/picoclaw/pkg/devices/events"
-	"github.com/sipeed/picoclaw/pkg/devices/sources"
-	"github.com/sipeed/picoclaw/pkg/logger"
-	"github.com/sipeed/picoclaw/pkg/state"
+	"github.com/oryna-ai/picoclaw/pkg/bus"
+	"github.com/oryna-ai/picoclaw/pkg/constants"
+	"github.com/oryna-ai/picoclaw/pkg/devices/events"
+	"github.com/oryna-ai/picoclaw/pkg/devices/sources"
+	"github.com/oryna-ai/picoclaw/pkg/logger"
+	"github.com/oryna-ai/picoclaw/pkg/state"
 )
 
 type Service struct {

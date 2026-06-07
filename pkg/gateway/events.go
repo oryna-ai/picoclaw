@@ -3,8 +3,8 @@ package gateway
 import (
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/agent"
-	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
+	"github.com/oryna-ai/picoclaw/pkg/agent"
+	runtimeevents "github.com/oryna-ai/picoclaw/pkg/events"
 )
 
 type gatewayEventPayload struct {

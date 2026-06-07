@@ -8,10 +8,10 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/sipeed/picoclaw/cmd/picoclaw/internal"
-	"github.com/sipeed/picoclaw/cmd/picoclaw/internal/cliui"
-	"github.com/sipeed/picoclaw/pkg/config"
-	"github.com/sipeed/picoclaw/pkg/credential"
+	"github.com/oryna-ai/picoclaw/cmd/picoclaw/internal"
+	"github.com/oryna-ai/picoclaw/cmd/picoclaw/internal/cliui"
+	"github.com/oryna-ai/picoclaw/pkg/config"
+	"github.com/oryna-ai/picoclaw/pkg/credential"
 )
 
 func onboard(encrypt bool) {

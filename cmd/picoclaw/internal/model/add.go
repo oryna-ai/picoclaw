@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sipeed/picoclaw/cmd/picoclaw/internal"
-	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/oryna-ai/picoclaw/cmd/picoclaw/internal"
+	"github.com/oryna-ai/picoclaw/pkg/config"
 )
 
 const defaultAliasName = "custom-prefer"

@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/oryna-ai/picoclaw/pkg/logger"
 )
 
 // SQL statements for FTS5 tables with trigram tokenizer.

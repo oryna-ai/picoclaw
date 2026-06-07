@@ -8,11 +8,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
-	"github.com/sipeed/picoclaw/pkg/logger"
-	"github.com/sipeed/picoclaw/pkg/providers"
-	"github.com/sipeed/picoclaw/pkg/providers/messageutil"
-	"github.com/sipeed/picoclaw/pkg/tools"
+	runtimeevents "github.com/oryna-ai/picoclaw/pkg/events"
+	"github.com/oryna-ai/picoclaw/pkg/logger"
+	"github.com/oryna-ai/picoclaw/pkg/providers"
+	"github.com/oryna-ai/picoclaw/pkg/providers/messageutil"
+	"github.com/oryna-ai/picoclaw/pkg/tools"
 )
 
 // ====================== Config & Constants ======================

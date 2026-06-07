@@ -12,7 +12,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/sipeed/picoclaw/pkg/logger"
+	"github.com/oryna-ai/picoclaw/pkg/logger"
 )
 
 // Config holds engine configuration.

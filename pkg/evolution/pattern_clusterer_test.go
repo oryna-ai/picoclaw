@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/evolution"
-	"github.com/sipeed/picoclaw/pkg/providers"
+	"github.com/oryna-ai/picoclaw/pkg/evolution"
+	"github.com/oryna-ai/picoclaw/pkg/providers"
 )
 
 type llmClusterTestProvider struct {

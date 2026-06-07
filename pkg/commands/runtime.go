@@ -3,7 +3,7 @@ package commands
 import (
 	"context"
 
-	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/oryna-ai/picoclaw/pkg/config"
 )
 
 type MCPServerInfo struct {

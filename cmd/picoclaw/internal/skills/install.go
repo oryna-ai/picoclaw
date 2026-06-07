@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/sipeed/picoclaw/cmd/picoclaw/internal"
+	"github.com/oryna-ai/picoclaw/cmd/picoclaw/internal"
 )
 
 func newInstallCommand() *cobra.Command {

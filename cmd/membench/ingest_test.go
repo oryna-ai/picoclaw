@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sipeed/picoclaw/pkg/seahorse"
+	"github.com/oryna-ai/picoclaw/pkg/seahorse"
 )
 
 func TestIngestSeahorseIdempotent(t *testing.T) {

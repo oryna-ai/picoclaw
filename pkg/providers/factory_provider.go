@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/config"
-	anthropicmessages "github.com/sipeed/picoclaw/pkg/providers/anthropic_messages"
-	"github.com/sipeed/picoclaw/pkg/providers/azure"
-	"github.com/sipeed/picoclaw/pkg/providers/bedrock"
-	"github.com/sipeed/picoclaw/pkg/providers/common"
+	"github.com/oryna-ai/picoclaw/pkg/config"
+	anthropicmessages "github.com/oryna-ai/picoclaw/pkg/providers/anthropic_messages"
+	"github.com/oryna-ai/picoclaw/pkg/providers/azure"
+	"github.com/oryna-ai/picoclaw/pkg/providers/bedrock"
+	"github.com/oryna-ai/picoclaw/pkg/providers/common"
 )
 
 type protocolMeta struct {

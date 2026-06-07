@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sipeed/picoclaw/cmd/picoclaw/internal"
-	"github.com/sipeed/picoclaw/cmd/picoclaw/internal/cliui"
-	"github.com/sipeed/picoclaw/pkg/auth"
-	"github.com/sipeed/picoclaw/pkg/config"
-	"github.com/sipeed/picoclaw/pkg/providers"
+	"github.com/oryna-ai/picoclaw/cmd/picoclaw/internal"
+	"github.com/oryna-ai/picoclaw/cmd/picoclaw/internal/cliui"
+	"github.com/oryna-ai/picoclaw/pkg/auth"
+	"github.com/oryna-ai/picoclaw/pkg/config"
+	"github.com/oryna-ai/picoclaw/pkg/providers"
 )
 
 func statusCmd() {

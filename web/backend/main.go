@@ -26,14 +26,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/config"
-	"github.com/sipeed/picoclaw/pkg/logger"
-	"github.com/sipeed/picoclaw/pkg/netbind"
-	"github.com/sipeed/picoclaw/web/backend/api"
-	"github.com/sipeed/picoclaw/web/backend/dashboardauth"
-	"github.com/sipeed/picoclaw/web/backend/launcherconfig"
-	"github.com/sipeed/picoclaw/web/backend/middleware"
-	"github.com/sipeed/picoclaw/web/backend/utils"
+	"github.com/oryna-ai/picoclaw/pkg/config"
+	"github.com/oryna-ai/picoclaw/pkg/logger"
+	"github.com/oryna-ai/picoclaw/pkg/netbind"
+	"github.com/oryna-ai/picoclaw/web/backend/api"
+	"github.com/oryna-ai/picoclaw/web/backend/dashboardauth"
+	"github.com/oryna-ai/picoclaw/web/backend/launcherconfig"
+	"github.com/oryna-ai/picoclaw/web/backend/middleware"
+	"github.com/oryna-ai/picoclaw/web/backend/utils"
 )
 
 const (

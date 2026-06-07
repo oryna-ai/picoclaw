@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/providers/protocoltypes"
+	"github.com/oryna-ai/picoclaw/pkg/providers/protocoltypes"
 )
 
 // writeValidResponse writes a minimal valid Responses API response.

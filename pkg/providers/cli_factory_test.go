@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/sipeed/picoclaw/pkg/config"
+	"github.com/oryna-ai/picoclaw/pkg/config"
 )
 
 func testProviderWorkspace(t *testing.T, provider any) string {

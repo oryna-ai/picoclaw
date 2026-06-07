@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/providers/protocoltypes"
+	"github.com/oryna-ai/picoclaw/pkg/providers/protocoltypes"
 )
 
 // Re-export protocol types used across providers.

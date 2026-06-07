@@ -9,7 +9,7 @@ import (
 
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
-	"github.com/sipeed/picoclaw/pkg/channels"
+	"github.com/oryna-ai/picoclaw/pkg/channels"
 )
 
 func TestExtractContent(t *testing.T) {

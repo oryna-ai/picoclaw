@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
+	runtimeevents "github.com/oryna-ai/picoclaw/pkg/events"
 )
 
 func subscribeRuntimeEventsForTest(

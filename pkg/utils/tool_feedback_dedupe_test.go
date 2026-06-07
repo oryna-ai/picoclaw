@@ -3,7 +3,7 @@ package utils
 import (
 	"testing"
 
-	"github.com/sipeed/picoclaw/pkg/providers"
+	"github.com/oryna-ai/picoclaw/pkg/providers"
 )
 
 func TestToolCallExplanationDuplicatesContent(t *testing.T) {

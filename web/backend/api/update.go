@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/sipeed/picoclaw/pkg/updater"
+	"github.com/oryna-ai/picoclaw/pkg/updater"
 )
 
 // registerUpdateRoutes registers the self-update endpoint.

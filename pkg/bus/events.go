@@ -1,7 +1,7 @@
 package bus
 
 import (
-	runtimeevents "github.com/sipeed/picoclaw/pkg/events"
+	runtimeevents "github.com/oryna-ai/picoclaw/pkg/events"
 )
 
 type busPublishFailedPayload struct {

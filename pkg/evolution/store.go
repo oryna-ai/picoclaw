@@ -14,8 +14,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sipeed/picoclaw/pkg/fileutil"
-	"github.com/sipeed/picoclaw/pkg/skills"
+	"github.com/oryna-ai/picoclaw/pkg/fileutil"
+	"github.com/oryna-ai/picoclaw/pkg/skills"
 )
 
 type Store struct {

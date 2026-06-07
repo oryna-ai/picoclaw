@@ -16,10 +16,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sipeed/picoclaw/pkg/config"
-	"github.com/sipeed/picoclaw/pkg/fileutil"
-	"github.com/sipeed/picoclaw/pkg/skills"
-	"github.com/sipeed/picoclaw/pkg/utils"
+	"github.com/oryna-ai/picoclaw/pkg/config"
+	"github.com/oryna-ai/picoclaw/pkg/fileutil"
+	"github.com/oryna-ai/picoclaw/pkg/skills"
+	"github.com/oryna-ai/picoclaw/pkg/utils"
 )
 
 const defaultInstallSkillRegistry = "github"
